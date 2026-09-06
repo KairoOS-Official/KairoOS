@@ -27,14 +27,21 @@ export interface ScreensaverDisplaySettings {
   overlayBrightness?: number; // 10 to 100
   displayLayout?: 'karaoke' | 'immersive';
   lyricsFontSize?: 'small' | 'medium' | 'large' | 'xlarge';
+  lyricsAlignment?: 'left' | 'center' | 'right';
   coverSize?: 'small' | 'medium' | 'large';
   vinylRotation?: boolean;
+  vinylSpeed?: 'slow' | 'normal' | 'fast';
   blurBackground?: boolean;
+  blurIntensity?: number;
   showControls?: boolean;
   showProgressBar?: boolean;
   showPlaylistName?: boolean;
+  showAlbumName?: boolean;
+  showDeviceBadge?: boolean;
+  showGamepadHints?: boolean;
   transitionSpeed?: 'instant' | 'fast' | 'smooth';
   lyricsHighlightColor?: string;
+  lyricsGlow?: boolean;
 }
 
 interface ScreensaverViewProps {
@@ -81,14 +88,31 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
   const showLyrics = displaySettings?.showLyrics ?? true;
   const overlayBrightness = displaySettings?.overlayBrightness ?? 80;
   const lyricsFontSize = displaySettings?.lyricsFontSize || 'large';
+  const lyricsAlignment = displaySettings?.lyricsAlignment || 'left';
   const coverSize = displaySettings?.coverSize || 'medium';
   const vinylRotation = displaySettings?.vinylRotation ?? true;
+  const vinylSpeed = displaySettings?.vinylSpeed || 'normal';
   const blurBackground = displaySettings?.blurBackground ?? true;
+  const blurIntensity = displaySettings?.blurIntensity ?? 30;
   const showControls = displaySettings?.showControls ?? true;
   const showProgressBar = displaySettings?.showProgressBar ?? true;
   const showPlaylistName = displaySettings?.showPlaylistName ?? true;
+  const showAlbumName = displaySettings?.showAlbumName ?? true;
+  const showDeviceBadge = displaySettings?.showDeviceBadge ?? true;
+  const showGamepadHints = displaySettings?.showGamepadHints ?? true;
   const transitionSpeed = displaySettings?.transitionSpeed || 'smooth';
   const lyricsHighlightColor = displaySettings?.lyricsHighlightColor || 'accent';
+  const lyricsGlow = displaySettings?.lyricsGlow ?? true;
+
+  // Toast feedback pour les ajouts aux favoris et actions
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const handleFavoriteClick = () => {
+    if (onToggleFavorite) {
+      onToggleFavorite();
+      setToastMessage(!isFavorite ? '♥ Titre ajouté aux favoris Spotify !' : 'Titre retiré des favoris');
+      setTimeout(() => setToastMessage(null), 2500);
+    }
+  };
 
   // Extraction couleur dominante avec ColorThief
   const [dominantColor, setDominantColor] = useState<ExtractedColor>({
@@ -124,9 +148,9 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
             onTogglePlay();
           }
           // Y (Bouton 3) -> Favori
-          else if (gp.buttons[3]?.pressed && onToggleFavorite) {
+          else if (gp.buttons[3]?.pressed) {
             lastButtonPress = now;
-            onToggleFavorite();
+            handleFavoriteClick();
           }
           // D-Pad Gauche (Bouton 14 ou axe < -0.6) -> Précédent
           else if ((gp.buttons[14]?.pressed || gp.axes[0] < -0.6) && onPrevious) {
@@ -150,7 +174,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
 
     animFrame = requestAnimationFrame(pollGamepad);
     return () => cancelAnimationFrame(animFrame);
-  }, [onTogglePlay, onToggleFavorite, onPrevious, onNext, onExit]);
+  }, [onTogglePlay, isFavorite, onPrevious, onNext, onExit]);
 
   // Index de la ligne active
   const activeLyricIndex = lyrics.reduce((acc, line, idx) => {
@@ -303,15 +327,15 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
 
         {/* Favori */}
         <button
-          onClick={onToggleFavorite}
+          onClick={handleFavoriteClick}
           className={`p-2.5 rounded-full transition-all cursor-pointer ${
             isFavorite
-              ? 'text-rose-500 bg-rose-500/15 shadow-sm'
+              ? 'text-rose-500 bg-rose-500/20 shadow-md scale-110'
               : 'text-[var(--kairo-text-secondary,#94a1b2)] hover:text-rose-400 bg-white/5 hover:bg-white/10'
           }`}
-          title="Ajouter aux favoris (Touche Y)"
+          title="Ajouter aux favoris Spotify (Touche Y)"
         >
-          <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+          <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-500 text-rose-500' : ''}`} />
         </button>
       </div>
     );
@@ -362,6 +386,14 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
         }}
       />
 
+      {/* Toast Feedback Temporaire (Ajout favoris etc.) */}
+      {toastMessage && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-2xl bg-black/85 backdrop-blur-md border border-white/20 text-white font-bold text-xs shadow-2xl flex items-center gap-2.5 animate-fadeIn">
+          <Heart className="w-4 h-4 fill-rose-500 text-rose-500" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Barre supérieure : Indicateur Connect, Infos Playlist & Actions */}
       <header
         className="relative z-10 p-5 md:px-8 flex items-center justify-between border-b backdrop-blur-md"
@@ -375,13 +407,15 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
             className="w-2.5 h-2.5 rounded-full animate-pulse"
             style={{ backgroundColor: 'var(--kairo-accent-primary, #10b981)' }}
           />
-          <div
-            className="flex items-center gap-1.5 text-xs font-bold font-mono tracking-wider uppercase"
-            style={{ color: 'var(--kairo-accent-primary, #10b981)' }}
-          >
-            <Wifi className="w-3.5 h-3.5" />
-            <span>Spotify Connect : {track?.deviceName || 'Borne Kaïro'}</span>
-          </div>
+          {showDeviceBadge && (
+            <div
+              className="flex items-center gap-1.5 text-xs font-bold font-mono tracking-wider uppercase"
+              style={{ color: 'var(--kairo-accent-primary, #10b981)' }}
+            >
+              <Wifi className="w-3.5 h-3.5" />
+              <span>Spotify Connect : {track?.deviceName || 'Borne Kaïro'}</span>
+            </div>
+          )}
           {showPlaylistName && track?.playlistName && (
             <span
               className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border"

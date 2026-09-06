@@ -57,6 +57,11 @@
       "default": "hybrid_auto",
       "label": "Mode de fonctionnement (hybrid_auto / direct_speaker / remote_speaker_screensaver)"
     },
+    "selected_device": {
+      "type": "string",
+      "default": "Salon (Echo / Enceinte)",
+      "label": "Enceinte externe surveillée (seule cette enceinte déclenche la veille)"
+    },
     "display_layout": {
       "type": "select",
       "options": ["karaoke", "immersive"],
@@ -69,6 +74,12 @@
       "default": "large",
       "label": "Taille des paroles"
     },
+    "lyrics_alignment": {
+      "type": "select",
+      "options": ["left", "center", "right"],
+      "default": "left",
+      "label": "Alignement des paroles (gauche, centré, droite)"
+    },
     "cover_size": {
       "type": "select",
       "options": ["small", "medium", "large"],
@@ -80,10 +91,21 @@
       "default": true,
       "label": "Rotation vinyle sur la pochette"
     },
+    "vinyl_speed": {
+      "type": "select",
+      "options": ["slow", "normal", "fast"],
+      "default": "normal",
+      "label": "Vitesse de rotation du vinyle 33T"
+    },
     "blur_background": {
       "type": "boolean",
       "default": true,
       "label": "Fond flou couleur pochette (layout immersif)"
+    },
+    "blur_intensity": {
+      "type": "number",
+      "default": 30,
+      "label": "Intensité du flou d'arrière-plan (10 à 60px)"
     },
     "show_controls": {
       "type": "boolean",
@@ -100,6 +122,21 @@
       "default": true,
       "label": "Afficher le nom de la playlist"
     },
+    "show_album_name": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher le nom de l'album"
+    },
+    "show_device_badge": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher le badge de l'appareil diffuseur"
+    },
+    "show_gamepad_hints": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher les raccourcis manette en bas d'écran"
+    },
     "transition_speed": {
       "type": "select",
       "options": ["instant", "fast", "smooth"],
@@ -109,7 +146,12 @@
     "lyrics_highlight_color": {
       "type": "string",
       "default": "accent",
-      "label": "Couleur ligne active (accent = couleur du thème)"
+      "label": "Couleur ligne active (accent = couleur du thème, ou hex)"
+    },
+    "lyrics_glow": {
+      "type": "boolean",
+      "default": true,
+      "label": "Effet de lueur néon sur la ligne active"
     },
     "spotify_device_name": {
       "type": "string",
