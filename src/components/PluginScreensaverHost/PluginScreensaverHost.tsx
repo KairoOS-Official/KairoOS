@@ -124,10 +124,34 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
           console.warn('[PluginScreensaverHost] Erreur sauvegarde réglages plugin:', err);
         }
       }
+
+      // Transmission directe des réglages vers l'iframe en temps réel
+      if (type === 'kairo_update_settings' && settings) {
+        if (iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage({ type: 'kairo_update_settings', settings }, '*');
+        }
+      }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Écoute de l'événement personnalisé de mise à jour des paramètres
+  useEffect(() => {
+    const handlePluginSettingsUpdate = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const newSettings = customEvt.detail?.settings;
+      if (newSettings && iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage(
+          { type: 'kairo_update_settings', settings: newSettings },
+          '*'
+        );
+      }
+    };
+
+    window.addEventListener('kairo_update_plugin_settings', handlePluginSettingsUpdate);
+    return () => window.removeEventListener('kairo_update_plugin_settings', handlePluginSettingsUpdate);
   }, []);
 
   // 3. Raccourci global touche Inser (Insert) et déblocage audio instantané

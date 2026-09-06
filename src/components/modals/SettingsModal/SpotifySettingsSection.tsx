@@ -467,17 +467,42 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     }
   };
 
-  // Sauvegarde
+  const broadcastSettingsUpdate = (payload: any) => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('kairo_update_plugin_settings', {
+          detail: { id: 'kairo-spotify-screensaver', settings: payload },
+        })
+      );
+      window.postMessage(
+        {
+          type: 'kairo_update_settings',
+          settings: payload,
+        },
+        '*'
+      );
+      const iframes = document.querySelectorAll('iframe');
+      iframes.forEach((ifr) => {
+        try {
+          ifr.contentWindow?.postMessage(
+            {
+              type: 'kairo_update_settings',
+              settings: payload,
+            },
+            '*'
+          );
+        } catch (_) {}
+      });
+    } catch (_) {}
+  };
+
+  // Enregistrer tous les réglages
   const handleSave = async () => {
     const payload = {
       ...initialSettings,
       enabled: pluginEnabled,
-      operation_mode: 'hybrid_auto',
-      spotify_device_name: deviceName,
-      target_speaker: targetSpeaker,
-      selected_device: targetSpeaker,
-      idle_timeout_seconds: idleTimeout,
-      custom_devices: customDevices,
+      show_cover: showCover,
+      show_lyrics: showLyrics,
       display_layout: displayLayout,
       lyrics_font_size: lyricsFontSize,
       lyrics_alignment: lyricsAlignment,
@@ -495,8 +520,11 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
       show_device_badge: showDeviceBadge,
       show_gamepad_hints: showGamepadHints,
       transition_speed: transitionSpeed,
-      show_cover: showCover,
-      show_lyrics: showLyrics,
+      selected_device: targetSpeaker.trim(),
+      target_speaker: targetSpeaker.trim(),
+      idle_timeout_seconds: idleTimeout,
+      custom_devices: customDevices,
+      spotify_device_name: deviceName.trim() || 'Borne Kaïro',
       overlay_brightness: overlayBrightness,
       spotify_access_token: token.trim(),
       spotify_client_id: clientId.trim() || initialSettings.spotify_client_id || '744337ebc86048fc9d3ac3cdffd82aef',
@@ -505,16 +533,7 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     };
 
     await onSave(payload);
-
-    try {
-      window.postMessage(
-        {
-          type: 'kairo_update_settings',
-          settings: payload,
-        },
-        '*'
-      );
-    } catch (_) {}
+    broadcastSettingsUpdate(payload);
 
     setSavedSuccess(true);
     setTimeout(() => setSavedSuccess(false), 2500);

@@ -184,14 +184,16 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
     return acc;
   }, -1);
 
-  // Défilement automatique centré
+  // Défilement automatique centré STRICTEMENT confiné au conteneur des paroles
   useEffect(() => {
     if (activeLyricIndex >= 0 && lyricsContainerRef.current) {
-      const activeElem = lyricsContainerRef.current.children[activeLyricIndex] as HTMLElement;
+      const container = lyricsContainerRef.current;
+      const activeElem = container.children[activeLyricIndex] as HTMLElement;
       if (activeElem) {
-        activeElem.scrollIntoView({
+        const targetScroll = activeElem.offsetTop - container.clientHeight / 2 + activeElem.clientHeight / 2;
+        container.scrollTo({
+          top: Math.max(0, targetScroll),
           behavior: transitionSpeed === 'instant' ? 'auto' : 'smooth',
-          block: 'center',
         });
       }
     }
@@ -221,30 +223,18 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
     }
   }, [coverSize]);
 
-  // Classes de taille de paroles
+  // Classes de taille de police fixe pour tout le texte (aucun décalage ni saut de ligne dynamique)
   const lyricsFontClass = useMemo(() => {
     switch (lyricsFontSize) {
       case 'small':
-        return {
-          active: 'text-xl md:text-2xl',
-          normal: 'text-base md:text-lg',
-        };
+        return 'text-lg md:text-xl';
       case 'medium':
-        return {
-          active: 'text-2xl md:text-3xl',
-          normal: 'text-lg md:text-xl',
-        };
+        return 'text-xl md:text-2xl';
       case 'xlarge':
-        return {
-          active: 'text-4xl md:text-5xl',
-          normal: 'text-2xl md:text-3xl',
-        };
+        return 'text-3xl md:text-4xl';
       case 'large':
       default:
-        return {
-          active: 'text-3xl md:text-4xl',
-          normal: 'text-xl md:text-2xl',
-        };
+        return 'text-2xl md:text-3xl';
     }
   }, [lyricsFontSize]);
 
@@ -615,7 +605,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
 
             {/* Droite : Paroles immersives grand format */}
             {showLyrics && (
-              <div className="flex-1 w-full max-w-lg h-[340px] md:h-[480px] flex flex-col justify-center relative">
+              <div className="flex-1 w-full max-w-2xl h-[380px] md:h-[520px] flex flex-col justify-center relative min-w-0">
                 {lyrics.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
                     <Volume2
@@ -638,7 +628,13 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                 ) : (
                   <div
                     ref={lyricsContainerRef}
-                    className="h-full overflow-y-auto no-scrollbar space-y-6 py-32 px-4 text-center md:text-left"
+                    className={`h-full overflow-y-auto no-scrollbar space-y-7 py-32 px-4 md:px-8 w-full ${
+                      lyricsAlignment === 'center'
+                        ? 'text-center'
+                        : lyricsAlignment === 'right'
+                        ? 'text-right'
+                        : 'text-left'
+                    }`}
                   >
                     {lyrics.map((line, idx) => {
                       const isActive = idx === activeLyricIndex;
@@ -648,12 +644,12 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         <p
                           key={idx}
                           style={isActive ? activeLyricStyle : undefined}
-                          className={`${transitionClass} font-bold leading-relaxed cursor-default ${
+                          className={`font-bold leading-relaxed cursor-default transition-colors duration-300 break-words whitespace-normal ${lyricsFontClass} ${
                             isActive
-                              ? `${lyricsFontClass.active} scale-105 origin-left`
+                              ? 'opacity-100 underline decoration-[3px] underline-offset-8'
                               : isPast
-                              ? `${lyricsFontClass.normal} opacity-40`
-                              : `${lyricsFontClass.normal} opacity-70`
+                              ? 'opacity-35 text-slate-300'
+                              : 'opacity-65 text-slate-200'
                           }`}
                         >
                           {line.text}
@@ -767,8 +763,8 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
             {showLyrics && (
               <div
                 className={`${
-                  showCover ? 'lg:col-span-7' : 'lg:col-span-12 max-w-4xl mx-auto'
-                } h-[380px] md:h-[520px] flex flex-col justify-center relative`}
+                  showCover ? 'lg:col-span-7' : 'lg:col-span-12'
+                } h-[420px] md:h-[580px] flex flex-col justify-center relative min-w-0 w-full`}
               >
                 {lyrics.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
@@ -792,7 +788,13 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                 ) : (
                   <div
                     ref={lyricsContainerRef}
-                    className="h-full overflow-y-auto no-scrollbar space-y-6 py-36 px-4"
+                    className={`h-full overflow-y-auto no-scrollbar space-y-7 py-36 px-4 md:px-8 w-full ${
+                      lyricsAlignment === 'center'
+                        ? 'text-center'
+                        : lyricsAlignment === 'right'
+                        ? 'text-right'
+                        : 'text-left'
+                    }`}
                   >
                     {lyrics.map((line, idx) => {
                       const isActive = idx === activeLyricIndex;
@@ -802,12 +804,12 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         <p
                           key={idx}
                           style={isActive ? activeLyricStyle : undefined}
-                          className={`${transitionClass} font-bold leading-relaxed cursor-default ${
+                          className={`font-bold leading-relaxed cursor-default transition-colors duration-300 break-words whitespace-normal ${lyricsFontClass} ${
                             isActive
-                              ? `${lyricsFontClass.active} scale-105 origin-left`
+                              ? 'opacity-100 underline decoration-[3px] underline-offset-8'
                               : isPast
-                              ? `${lyricsFontClass.normal} opacity-40`
-                              : `${lyricsFontClass.normal} opacity-75`
+                              ? 'opacity-35 text-slate-300'
+                              : 'opacity-65 text-slate-200'
                           }`}
                         >
                           {line.text}

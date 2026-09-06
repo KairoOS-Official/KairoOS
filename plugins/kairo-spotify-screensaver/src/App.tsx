@@ -186,6 +186,21 @@ export default function App() {
   const manualOpenRef = useRef<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
 
+  // Références d'interpolation haute fréquence (50ms) pour une synchronisation fluide des paroles à 60fps
+  const baseProgressRef = useRef<number>(0);
+  const baseTimeRef = useRef<number>(performance.now());
+  const isPlayingRef = useRef<boolean>(false);
+
+  // Synchronisation autoritaire de l'état de lecture
+  const syncTrackProgress = useCallback((liveTrack: SpotifyTrack) => {
+    setCurrentTrack(liveTrack);
+    baseProgressRef.current = liveTrack.progressMs || 0;
+    baseTimeRef.current = performance.now();
+    isPlayingRef.current = Boolean(liveTrack.isPlaying);
+    setIsPlayingAudio(Boolean(liveTrack.isPlaying));
+    setProgressMs(liveTrack.progressMs || 0);
+  }, []);
+
   // Détection robuste et stricte si la lecture s'effectue sur la borne (Web Playback SDK)
   const isBornePlayback = useCallback(
     (track: SpotifyTrack | null) => {
@@ -396,41 +411,44 @@ export default function App() {
     loadConfig();
   }, []);
 
-  // Écoute des messages de l'hôte KaïroOS
+  // Écoute des messages de l'hôte KaïroOS (Prise en compte des paramètres en temps réel)
   useEffect(() => {
     const handleHostMessage = (e: MessageEvent) => {
       if (!e.data) return;
       if (e.data.type === 'kairo_plugin_init' || e.data.type === 'kairo_update_settings') {
         const s = e.data.settings || {};
-        if (s.operation_mode) setOperationMode(s.operation_mode);
-        if (s.selected_device) setSelectedDevice(s.selected_device);
-        if (s.spotify_device_name) setBorneDeviceName(s.spotify_device_name);
-        if (s.idle_timeout_seconds) setIdleTimeoutSeconds(s.idle_timeout_seconds);
-        if (s.spotify_access_token) setSpotifyToken(s.spotify_access_token);
-        if (s.spotify_refresh_token) setSpotifyRefreshToken(s.spotify_refresh_token);
-        if (s.spotify_client_id) setSpotifyClientId(s.spotify_client_id);
+        if (s.operation_mode !== undefined) setOperationMode(s.operation_mode);
+        if (s.selected_device !== undefined) setSelectedDevice(s.selected_device);
+        if (s.target_speaker !== undefined && !s.selected_device) setSelectedDevice(s.target_speaker);
+        if (s.spotify_device_name !== undefined) setBorneDeviceName(s.spotify_device_name);
+        if (s.idle_timeout_seconds !== undefined) setIdleTimeoutSeconds(Number(s.idle_timeout_seconds));
+        if (s.spotify_access_token !== undefined) setSpotifyToken(s.spotify_access_token);
+        if (s.spotify_refresh_token !== undefined) setSpotifyRefreshToken(s.spotify_refresh_token);
+        if (s.spotify_client_id !== undefined) setSpotifyClientId(s.spotify_client_id);
+        if (Array.isArray(s.custom_devices)) setCustomDevices(s.custom_devices);
+
         setDisplaySettings((prev) => ({
           ...prev,
-          showCover: s.show_cover ?? prev.showCover,
-          showLyrics: s.show_lyrics ?? prev.showLyrics,
-          overlayBrightness: s.overlay_brightness ?? prev.overlayBrightness,
-          displayLayout: s.display_layout ?? prev.displayLayout,
-          lyricsFontSize: s.lyrics_font_size ?? prev.lyricsFontSize,
-          lyricsAlignment: s.lyrics_alignment ?? prev.lyricsAlignment,
-          coverSize: s.cover_size ?? prev.coverSize,
-          vinylRotation: s.vinyl_rotation ?? prev.vinylRotation,
-          vinylSpeed: s.vinyl_speed ?? prev.vinylSpeed,
-          blurBackground: s.blur_background ?? prev.blurBackground,
-          blurIntensity: s.blur_intensity ?? prev.blurIntensity,
-          showControls: s.show_controls ?? prev.showControls,
-          showProgressBar: s.show_progress_bar ?? prev.showProgressBar,
-          showPlaylistName: s.show_playlist_name ?? prev.showPlaylistName,
-          showAlbumName: s.show_album_name ?? prev.showAlbumName,
-          showDeviceBadge: s.show_device_badge ?? prev.showDeviceBadge,
-          showGamepadHints: s.show_gamepad_hints ?? prev.showGamepadHints,
-          transitionSpeed: s.transition_speed ?? prev.transitionSpeed,
-          lyricsHighlightColor: s.lyrics_highlight_color ?? prev.lyricsHighlightColor,
-          lyricsGlow: s.lyrics_glow ?? prev.lyricsGlow,
+          showCover: s.show_cover !== undefined ? Boolean(s.show_cover) : prev.showCover,
+          showLyrics: s.show_lyrics !== undefined ? Boolean(s.show_lyrics) : prev.showLyrics,
+          overlayBrightness: s.overlay_brightness !== undefined ? Number(s.overlay_brightness) : prev.overlayBrightness,
+          displayLayout: s.display_layout || prev.displayLayout,
+          lyricsFontSize: s.lyrics_font_size || prev.lyricsFontSize,
+          lyricsAlignment: s.lyrics_alignment || prev.lyricsAlignment,
+          coverSize: s.cover_size || prev.coverSize,
+          vinylRotation: s.vinyl_rotation !== undefined ? Boolean(s.vinyl_rotation) : prev.vinylRotation,
+          vinylSpeed: s.vinyl_speed || prev.vinylSpeed,
+          blurBackground: s.blur_background !== undefined ? Boolean(s.blur_background) : prev.blurBackground,
+          blurIntensity: s.blur_intensity !== undefined ? Number(s.blur_intensity) : prev.blurIntensity,
+          showControls: s.show_controls !== undefined ? Boolean(s.show_controls) : prev.showControls,
+          showProgressBar: s.show_progress_bar !== undefined ? Boolean(s.show_progress_bar) : prev.showProgressBar,
+          showPlaylistName: s.show_playlist_name !== undefined ? Boolean(s.show_playlist_name) : prev.showPlaylistName,
+          showAlbumName: s.show_album_name !== undefined ? Boolean(s.show_album_name) : prev.showAlbumName,
+          showDeviceBadge: s.show_device_badge !== undefined ? Boolean(s.show_device_badge) : prev.showDeviceBadge,
+          showGamepadHints: s.show_gamepad_hints !== undefined ? Boolean(s.show_gamepad_hints) : prev.showGamepadHints,
+          transitionSpeed: s.transition_speed || prev.transitionSpeed,
+          lyricsHighlightColor: s.lyrics_highlight_color || prev.lyricsHighlightColor,
+          lyricsGlow: s.lyrics_glow !== undefined ? Boolean(s.lyrics_glow) : prev.lyricsGlow,
         }));
       } else if (e.data.type === 'kairo_set_view_mode') {
         if (e.data.mode === 'fullscreen' || e.data.mode === 'minimized' || e.data.mode === 'hidden') {
@@ -443,18 +461,69 @@ export default function App() {
       } else if (e.data.type === 'kairo_activity' || e.data.type === 'dismiss_screensaver') {
         lastActivityRef.current = Date.now();
         setIdleSeconds(0);
-        const isBorne = isBornePlayback(currentTrack);
-        const isBornePlaying = Boolean(currentTrack?.isPlaying && isBorne);
-        if (!isBornePlaying && !manualOpenRef.current) {
-          if (currentTrack?.id) dismissedTrackIdRef.current = currentTrack.id;
-          setViewMode('hidden');
+        // Si l'utilisateur manipule la borne pendant le plein écran, basculer vers la vue flottante
+        if (viewMode === 'fullscreen' && !manualOpenRef.current) {
+          setViewMode('minimized');
         }
       }
     };
 
     window.addEventListener('message', handleHostMessage);
     return () => window.removeEventListener('message', handleHostMessage);
-  }, [currentTrack?.id, currentTrack?.deviceName, currentTrack?.isPlaying, currentTrack?.deviceId, isBornePlayback]);
+  }, [viewMode]);
+
+  // Rechargement proactif en arrière-plan des réglages depuis Tauri (garantit l'application temps réel sans redémarrage)
+  useEffect(() => {
+    const refreshSettingsFromTauri = async () => {
+      try {
+        const tauriInvoke =
+          (window as any).__TAURI__?.core?.invoke ||
+          (window.parent as any)?.__TAURI__?.core?.invoke;
+        if (tauriInvoke) {
+          const detail: any = await tauriInvoke('get_plugin', { id: 'kairo-spotify-screensaver' });
+          if (detail && detail.settings) {
+            const s = detail.settings;
+            if (s.operation_mode !== undefined) setOperationMode(s.operation_mode);
+            if (s.selected_device) setSelectedDevice(s.selected_device);
+            if (s.target_speaker && !s.selected_device) setSelectedDevice(s.target_speaker);
+            if (s.spotify_device_name) setBorneDeviceName(s.spotify_device_name);
+            if (s.idle_timeout_seconds) setIdleTimeoutSeconds(Number(s.idle_timeout_seconds));
+            if (s.spotify_access_token) setSpotifyToken((p) => s.spotify_access_token || p);
+            if (s.spotify_refresh_token) setSpotifyRefreshToken(s.spotify_refresh_token);
+            if (s.spotify_client_id) setSpotifyClientId(s.spotify_client_id);
+            if (Array.isArray(s.custom_devices)) setCustomDevices(s.custom_devices);
+
+            setDisplaySettings((prev) => ({
+              ...prev,
+              showCover: s.show_cover !== undefined ? Boolean(s.show_cover) : prev.showCover,
+              showLyrics: s.show_lyrics !== undefined ? Boolean(s.show_lyrics) : prev.showLyrics,
+              overlayBrightness: s.overlay_brightness !== undefined ? Number(s.overlay_brightness) : prev.overlayBrightness,
+              displayLayout: s.display_layout || prev.displayLayout,
+              lyricsFontSize: s.lyrics_font_size || prev.lyricsFontSize,
+              lyricsAlignment: s.lyrics_alignment || prev.lyricsAlignment,
+              coverSize: s.cover_size || prev.coverSize,
+              vinylRotation: s.vinyl_rotation !== undefined ? Boolean(s.vinyl_rotation) : prev.vinylRotation,
+              vinylSpeed: s.vinyl_speed || prev.vinylSpeed,
+              blurBackground: s.blur_background !== undefined ? Boolean(s.blur_background) : prev.blurBackground,
+              blurIntensity: s.blur_intensity !== undefined ? Number(s.blur_intensity) : prev.blurIntensity,
+              showControls: s.show_controls !== undefined ? Boolean(s.show_controls) : prev.showControls,
+              showProgressBar: s.show_progress_bar !== undefined ? Boolean(s.show_progress_bar) : prev.showProgressBar,
+              showPlaylistName: s.show_playlist_name !== undefined ? Boolean(s.show_playlist_name) : prev.showPlaylistName,
+              showAlbumName: s.show_album_name !== undefined ? Boolean(s.show_album_name) : prev.showAlbumName,
+              showDeviceBadge: s.show_device_badge !== undefined ? Boolean(s.show_device_badge) : prev.showDeviceBadge,
+              showGamepadHints: s.show_gamepad_hints !== undefined ? Boolean(s.show_gamepad_hints) : prev.showGamepadHints,
+              transitionSpeed: s.transition_speed || prev.transitionSpeed,
+              lyricsHighlightColor: s.lyrics_highlight_color || prev.lyricsHighlightColor,
+              lyricsGlow: s.lyrics_glow !== undefined ? Boolean(s.lyrics_glow) : prev.lyricsGlow,
+            }));
+          }
+        }
+      } catch (_) {}
+    };
+
+    const interval = setInterval(refreshSettingsFromTauri, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Synchronisation de l'état du screensaver vers KaïroOS
   useEffect(() => {
@@ -620,21 +689,29 @@ export default function App() {
     audio.preload = 'auto';
 
     audio.ontimeupdate = () => {
-      setProgressMs(Math.floor(audio.currentTime * 1000));
+      const ms = Math.floor(audio.currentTime * 1000);
+      baseProgressRef.current = ms;
+      baseTimeRef.current = performance.now();
+      isPlayingRef.current = !audio.paused;
+      setProgressMs(ms);
     };
 
     audio.onended = () => {
+      isPlayingRef.current = false;
       setIsPlayingAudio(false);
       setProgressMs(0);
       setCurrentTrack((prev) => (prev ? { ...prev, isPlaying: false } : null));
     };
 
     audio.onpause = () => {
+      isPlayingRef.current = false;
       setIsPlayingAudio(false);
       setCurrentTrack((prev) => (prev ? { ...prev, isPlaying: false } : null));
     };
 
     audio.onplay = () => {
+      isPlayingRef.current = true;
+      baseTimeRef.current = performance.now();
       setIsPlayingAudio(true);
       setCurrentTrack((prev) => (prev ? { ...prev, isPlaying: true } : null));
     };
@@ -646,6 +723,23 @@ export default function App() {
       audio.src = '';
     };
   }, []);
+
+  // Interpolation locale haute fréquence (50ms) du temps de lecture
+  // Supprime les sauts de lignes et assure une synchronisation fluide et continue des paroles
+  useEffect(() => {
+    const ticker = setInterval(() => {
+      if (isPlayingRef.current && currentTrack?.durationMs) {
+        const elapsed = performance.now() - baseTimeRef.current;
+        const estimated = Math.min(
+          currentTrack.durationMs,
+          Math.round(baseProgressRef.current + elapsed)
+        );
+        setProgressMs(estimated);
+      }
+    }, 50);
+
+    return () => clearInterval(ticker);
+  }, [currentTrack?.durationMs]);
 
   useEffect(() => {
     if (!audioRef.current) return;
@@ -669,9 +763,7 @@ export default function App() {
         setWebPlaybackDeviceId(deviceId);
       },
       (liveTrack) => {
-        setCurrentTrack(liveTrack);
-        setProgressMs(liveTrack.progressMs);
-        setIsPlayingAudio(liveTrack.isPlaying);
+        syncTrackProgress(liveTrack);
       },
       (err) => {
         console.warn('[Web Playback SDK] Erreur:', err);
@@ -689,7 +781,7 @@ export default function App() {
       if (cleanup) cleanup();
       setWebPlaybackReady(false);
     };
-  }, [spotifyToken, borneDeviceName, spotifyClientId, spotifyRefreshToken, spotifyTokenExpiresAt, tokenAnalysis.status]);
+  }, [spotifyToken, borneDeviceName, spotifyClientId, spotifyRefreshToken, spotifyTokenExpiresAt, tokenAnalysis.status, syncTrackProgress]);
 
   // Renouvellement automatique proactif du jeton Spotify
   useEffect(() => {
@@ -737,22 +829,23 @@ export default function App() {
             onTokenRefreshed: handleTokenRefreshed,
           });
           if (active && liveTrack) {
-            setCurrentTrack(liveTrack);
-            setProgressMs(liveTrack.progressMs);
-            setIsPlayingAudio(liveTrack.isPlaying);
+            syncTrackProgress(liveTrack);
           }
         }
       } catch (_) {}
     };
 
     fetchSpotifyData();
-    const interval = setInterval(fetchSpotifyData, spotifyToken ? 3000 : 8000);
+    const interval = setInterval(
+      fetchSpotifyData,
+      spotifyToken && currentTrack?.isPlaying ? 1500 : 4000
+    );
 
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, [spotifyToken, spotifyClientId, spotifyRefreshToken, spotifyTokenExpiresAt, tokenAnalysis.status]);
+  }, [spotifyToken, spotifyClientId, spotifyRefreshToken, spotifyTokenExpiresAt, tokenAnalysis.status, currentTrack?.isPlaying, syncTrackProgress]);
 
   // Récupération des paroles LRCLIB à chaque changement de titre
   useEffect(() => {
@@ -868,10 +961,9 @@ export default function App() {
     const onUserActivity = () => {
       lastActivityRef.current = Date.now();
       setIdleSeconds(0);
-      // Si la borne n'est pas le haut-parleur direct, toute interaction ferme la veille
-      if (!isBornePlaying && viewMode === 'fullscreen' && !manualOpenRef.current) {
-        setViewMode('hidden');
-        if (currentTrack?.id) dismissedTrackIdRef.current = currentTrack.id;
+      // Quand la borne redevient active pendant le plein écran, basculer vers le mini-lecteur flottant
+      if (viewMode === 'fullscreen' && !manualOpenRef.current) {
+        setViewMode('minimized');
       }
     };
 
@@ -902,7 +994,9 @@ export default function App() {
   }, [isBornePlaying, viewMode, currentTrack?.id]);
 
   // =========================================================================
-  // LOGIQUE UNIFIÉE DU MODE HYBRIDE AVEC FILTRE STRICT DE L'ENCEINTE CIBLE
+  // LOGIQUE UNIFIÉE DU MODE HYBRIDE (POINT 4 DU CAHIER DES CHARGES)
+  // - Si musique en cours sur appareil sélectionné : afficher au minimum la partie flottante
+  // - Si la borne est inactive : agrandir la partie flottante / passer en plein écran
   // =========================================================================
   useEffect(() => {
     const interval = setInterval(() => {
@@ -923,31 +1017,31 @@ export default function App() {
         )
       );
 
-      // CAS 1 : La borne est choisie comme enceinte (Spotify Connect direct) -> Affichage immédiat prioritaire
-      if (isPlaying && isBorne) {
-        if (viewMode === 'hidden') {
-          console.log('🎵 [Spotify Plugin] Lecture sur borne détectée -> Affichage immédiat');
-          setViewMode('fullscreen');
-        }
-        setIdleSeconds(0);
-        return;
-      }
+      const isAuthorizedPlayback = isPlaying && (isBorne || isTargetExternalSpeaker);
 
-      // CAS 2 : La musique joue sur l'enceinte externe sélectionnée
-      if (isPlaying && isTargetExternalSpeaker) {
+      // CAS 1 & 2 : Lecture sur appareil sélectionné (Borne directe OU enceinte surveillée)
+      if (isAuthorizedPlayback) {
         const now = Date.now();
         const currentIdle = Math.floor((now - lastActivityRef.current) / 1000);
         setIdleSeconds(currentIdle);
 
-        // Si la borne est inactive depuis idleTimeoutSeconds -> lancer l'écran de veille
-        if (currentIdle >= idleTimeoutSeconds && viewMode === 'hidden') {
-          console.log(`🌙 [Spotify Plugin] Borne inactive & musique sur "${selectedDevice}" -> Lancement veille`);
-          setViewMode('fullscreen');
+        // Si la borne est inactive depuis idleTimeoutSeconds -> agrandir la partie flottante / plein écran
+        if (currentIdle >= idleTimeoutSeconds) {
+          if (viewMode !== 'fullscreen') {
+            console.log(`🌙 [Spotify Plugin] Borne inactive (${currentIdle}s >= ${idleTimeoutSeconds}s) -> Agrandissement plein écran`);
+            setViewMode('fullscreen');
+          }
+        } else {
+          // Si la borne est active -> afficher au minimum la partie flottante
+          if (viewMode === 'hidden' && dismissedTrackIdRef.current !== currentTrack?.id) {
+            console.log('🎵 [Spotify Plugin] Musique en cours sur appareil sélectionné -> Affichage mini-lecteur flottant');
+            setViewMode('minimized');
+          }
         }
         return;
       }
 
-      // CAS 3 : Musique sur une enceinte externe NON sélectionnée (ex: PC-FLORIAN, téléphone) OU aucune musique
+      // CAS 3 : Musique sur une enceinte externe NON sélectionnée (ex: PC-FLORIAN, téléphone) OU arrêt de la musique
       // RÈGLE EXPLICITE DE L'UTILISATEUR : « si la musique est sur une enceinte qui n'est pas sélectionnée alors on ne l'affiche pas »
       if (!isPlaying || (!isBorne && !isTargetExternalSpeaker)) {
         setIdleSeconds(0);
@@ -956,7 +1050,7 @@ export default function App() {
           setViewMode('hidden');
         }
       }
-    }, 1000);
+    }, 500);
 
     return () => clearInterval(interval);
   }, [currentTrack, isBornePlayback, selectedDevice, viewMode, idleTimeoutSeconds]);
@@ -986,10 +1080,20 @@ export default function App() {
         isBornePlaying={isBornePlaying}
         onMinimize={() => setViewMode('minimized')}
         onExit={() => {
-          setViewMode('hidden');
+          const isBorne = isBornePlayback(currentTrack);
+          const trackDevName = (currentTrack?.deviceName || '').trim().toLowerCase();
+          const targetDevName = (selectedDevice || '').trim().toLowerCase();
+          const isTargetExternal = Boolean(
+            !isBorne && currentTrack && targetDevName &&
+            (trackDevName === targetDevName || currentTrack.deviceId === selectedDevice || (targetDevName.length >= 4 && trackDevName.includes(targetDevName)))
+          );
+          if (currentTrack?.isPlaying && (isBorne || isTargetExternal)) {
+            setViewMode('minimized');
+          } else {
+            setViewMode('hidden');
+          }
           setIdleSeconds(0);
           manualOpenRef.current = false;
-          if (currentTrack?.id) dismissedTrackIdRef.current = currentTrack.id;
         }}
         isDemo={Boolean(spotifyToken && tokenAnalysis.status !== 'valid_format')}
         onTogglePlay={handleTogglePlay}
