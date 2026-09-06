@@ -1,0 +1,162 @@
+{
+  "id": "kairo-spotify-screensaver",
+  "name": "Spotify Connect Enceinte & Lyrics",
+  "version": "1.1.0",
+  "author": "KairoOS Team",
+  "type": "official",
+  "description": "Transforme la borne en enceinte Spotify Connect et affiche automatiquement les paroles karaoke en direct",
+  "min_kairo_version": "0.1.0",
+  "permissions": [
+    "network",
+    "read_settings",
+    "notifications"
+  ],
+  "entry": "index.js",
+  "ui": "dist/index.html",
+  "commands": [
+    "start",
+    "stop",
+    "test_lyrics",
+    "status"
+  ],
+  "contributes": {
+    "to": [
+      "kairo-remote",
+      "kairo-screensaver"
+    ],
+    "screensaver": {
+      "id": "kairo-spotify-screensaver",
+      "label": "Spotify Lyrics",
+      "entry": "dist/index.html",
+      "type": "audio_screensaver"
+    },
+    "remote_nav_item": {
+      "id": "kairo-spotify-screensaver",
+      "label": "Spotify Lyrics",
+      "icon": "sparkles",
+      "badge": "Connect",
+      "url": "/plugins/kairo-spotify-screensaver/dist/index.html"
+    },
+    "remote_settings_page": {
+      "title": "Configuration Spotify Borne",
+      "entry": "dist/index.html"
+    }
+  },
+  "settings_section": {
+    "label": "Spotify & Enceinte",
+    "icon": "sparkles"
+  },
+  "settings_schema": {
+    "enabled": {
+      "type": "boolean",
+      "default": true,
+      "label": "Activer le plugin Spotify"
+    },
+    "operation_mode": {
+      "type": "string",
+      "default": "hybrid_auto",
+      "label": "Mode de fonctionnement (hybrid_auto / direct_speaker / remote_speaker_screensaver)"
+    },
+    "display_layout": {
+      "type": "select",
+      "options": ["karaoke", "immersive"],
+      "default": "karaoke",
+      "label": "Disposition d'affichage (Karaoké ou Immersif)"
+    },
+    "lyrics_font_size": {
+      "type": "select",
+      "options": ["small", "medium", "large", "xlarge"],
+      "default": "large",
+      "label": "Taille des paroles"
+    },
+    "cover_size": {
+      "type": "select",
+      "options": ["small", "medium", "large"],
+      "default": "medium",
+      "label": "Taille de la jaquette"
+    },
+    "vinyl_rotation": {
+      "type": "boolean",
+      "default": true,
+      "label": "Rotation vinyle sur la pochette"
+    },
+    "blur_background": {
+      "type": "boolean",
+      "default": true,
+      "label": "Fond flou couleur pochette (layout immersif)"
+    },
+    "show_controls": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher les contrôles play/pause/skip"
+    },
+    "show_progress_bar": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher la barre de progression"
+    },
+    "show_playlist_name": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher le nom de la playlist"
+    },
+    "transition_speed": {
+      "type": "select",
+      "options": ["instant", "fast", "smooth"],
+      "default": "smooth",
+      "label": "Vitesse de transition entre morceaux"
+    },
+    "lyrics_highlight_color": {
+      "type": "string",
+      "default": "accent",
+      "label": "Couleur ligne active (accent = couleur du thème)"
+    },
+    "spotify_device_name": {
+      "type": "string",
+      "default": "Borne Kaïro (Ce PC)",
+      "label": "Nom de l'enceinte / appareil Spotify Connect"
+    },
+    "idle_timeout_seconds": {
+      "type": "number",
+      "default": 30,
+      "label": "Délai d'inactivité avant veille en Mode 2 (secondes, 10 à 300)"
+    },
+    "show_cover": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher la pochette d'album"
+    },
+    "show_lyrics": {
+      "type": "boolean",
+      "default": true,
+      "label": "Afficher les paroles karaoké LRCLIB"
+    },
+    "overlay_brightness": {
+      "type": "number",
+      "default": 80,
+      "label": "Luminosité de l'overlay (10 à 100%)"
+    },
+    "spotify_access_token": {
+      "type": "string",
+      "secret": true,
+      "default": "",
+      "label": "Token Spotify Web API (Access Token)"
+    },
+    "spotify_client_id": {
+      "type": "string",
+      "default": "",
+      "label": "Client ID Spotify (pour renouvellement automatique PKCE)"
+    },
+    "spotify_refresh_token": {
+      "type": "string",
+      "secret": true,
+      "default": "",
+      "label": "Refresh Token Spotify (renouvellement transparent)"
+    },
+    "spotify_token_expires_at": {
+      "type": "number",
+      "default": 0,
+      "label": "Date d'expiration du token actif (timestamp ms)"
+    }
+  }
+}

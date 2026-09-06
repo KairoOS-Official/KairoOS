@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --kairo-bg-primary: #0b0f19;
+  --kairo-bg-secondary: #111827;
+  --kairo-bg-card: #1e293b;
+  --kairo-accent-primary: #10b981;
+  --kairo-accent-secondary: #38bdf8;
+  --kairo-text-primary: #f8fafc;
+  --kairo-text-secondary: #94a1b2;
+  --kairo-text-muted: #64748b;
+  --kairo-border-color: #334155;
+  --kairo-is-dark: 1;
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 20s linear infinite;
+}
+
+/* Masquer la scrollbar tout en permettant le défilement */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
