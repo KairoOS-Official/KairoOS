@@ -994,10 +994,11 @@ export default function App() {
   }, [isBornePlaying, viewMode, currentTrack?.id]);
 
   // =========================================================================
-  // LOGIQUE UNIFIÉE DU MODE HYBRIDE (SURVEILLANCE STRICTE DE L'ENCEINTE SÉLECTIONNÉE)
-  // - Si le son ne sort pas de l'enceinte sélectionnée : AUCUN son sur la borne, AUCUN nom ni affichage (hidden)
-  // - Quand l'enceinte sélectionnée joue un morceau : affichage en petit en bas (minimized)
-  // - Quand la borne devient inactive : passage automatique en plein écran (fullscreen)
+  // LOGIQUE UNIFIÉE DU MODE HYBRIDE :
+  // 1. Joué soit sur la borne soit sur l'enceinte sélectionnée -> joué en MINIMIZE tout le temps
+  // 2. Si on ne fait rien pendant le temps de veille -> MAXIMIZE (plein écran)
+  // 3. Dès qu'une activité intervient pendant le plein écran -> retour en MINIMIZE
+  // 4. Si joué sur une AUTRE enceinte (ex: PC, téléphone) -> ON L'ENLÈVE / AFFICHE PAS (hidden)
   // =========================================================================
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1005,64 +1006,60 @@ export default function App() {
       const trackDevName = (currentTrack?.deviceName || '').trim().toLowerCase();
       const targetDevName = (selectedDevice || '').trim().toLowerCase();
       const isBorne = isBornePlayback(currentTrack);
-      const isTargetBorne = targetDevName.includes('borne') || targetDevName.includes('kairo') || targetDevName === (borneDeviceName || '').trim().toLowerCase();
 
-      // Correspondance stricte avec l'enceinte sélectionnée
-      const isSelectedSpeakerPlaying = Boolean(
-        isPlaying &&
-        currentTrack &&
-        (
-          targetDevName
-            ? (
-                isTargetBorne
-                  ? isBorne
-                  : (
-                      trackDevName === targetDevName ||
-                      currentTrack.deviceId === selectedDevice ||
-                      (targetDevName.length >= 3 && trackDevName.includes(targetDevName)) ||
-                      (trackDevName.length >= 3 && targetDevName.includes(trackDevName))
-                    )
-              )
-            : isBorne
+      const isTargetSpeaker = Boolean(
+        targetDevName && (
+          trackDevName === targetDevName ||
+          currentTrack?.deviceId === selectedDevice ||
+          (targetDevName.length >= 3 && trackDevName.includes(targetDevName)) ||
+          (trackDevName.length >= 3 && targetDevName.includes(trackDevName))
         )
       );
 
-      // CAS 1 : L'enceinte sélectionnée joue actuellement
-      if (isSelectedSpeakerPlaying) {
+      // Soit sur la borne, soit sur l'enceinte sélectionnée
+      const isAuthorizedDevice = isBorne || isTargetSpeaker;
+      const isAuthorizedPlaying = Boolean(isPlaying && currentTrack && isAuthorizedDevice);
+
+      // CAS 1 : Joué sur la borne OU sur l'enceinte sélectionnée
+      if (isAuthorizedPlaying) {
+        if (currentTrack?.id && dismissedTrackIdRef.current && dismissedTrackIdRef.current !== currentTrack.id) {
+          dismissedTrackIdRef.current = '';
+        }
+
         const now = Date.now();
         const currentIdle = Math.floor((now - lastActivityRef.current) / 1000);
         setIdleSeconds(currentIdle);
 
-        // Si la borne est inactive depuis le délai de veille -> Agrandir en plein écran
+        // Si on ne fait rien pendant le temps de veille -> maximize (plein écran)
         if (currentIdle >= idleTimeoutSeconds) {
           if (viewMode !== 'fullscreen') {
-            console.log(`🌙 [Spotify Plugin] Borne inactive (${currentIdle}s >= ${idleTimeoutSeconds}s) -> Agrandissement plein écran`);
+            console.log(`🌙 [Spotify Plugin] Borne inactive (${currentIdle}s >= ${idleTimeoutSeconds}s) -> Maximize plein écran`);
             setViewMode('fullscreen');
           }
         } else {
-          // Si la borne est active -> Afficher en petit en bas (mini-lecteur flottant)
-          if (viewMode === 'hidden' && dismissedTrackIdRef.current !== currentTrack?.id) {
-            console.log('🎵 [Spotify Plugin] Enceinte sélectionnée en lecture -> Affichage mini-lecteur flottant en bas');
+          // Sinon -> on le joue en minimize tout le temps
+          if (viewMode !== 'minimized' && dismissedTrackIdRef.current !== currentTrack?.id) {
+            console.log('🎵 [Spotify Plugin] Musique en cours sur borne ou enceinte -> Minimize tout le temps');
             setViewMode('minimized');
           }
         }
         return;
       }
 
-      // CAS 2 : Le son ne sort PAS de l'enceinte sélectionnée (autre appareil ex: PC-FLORIAN, ou pause)
-      // RÈGLE FORMELLE DE L'UTILISATEUR : « si le son ne sort pas de l'enceite selectionner on mets auccun song sur la borne et nom de l'appareil »
+      // CAS 2 : Joué sur une autre enceinte (ex: PC-Florian) OU musique arrêtée
+      // RÈGLE : Si joué sur une autre enceinte -> on l'enlève ou affiche pas
       if (audioRef.current && !audioRef.current.paused) {
         audioRef.current.pause();
       }
       setIdleSeconds(0);
       if (viewMode !== 'hidden' && !manualOpenRef.current) {
-        console.log('🔇 [Spotify Plugin] Appareil non sélectionné -> Aucun son, aucun affichage (masqué)');
+        console.log('🔇 [Spotify Plugin] Autre enceinte ou arrêt -> On l\'enlève / affiche pas (hidden)');
         setViewMode('hidden');
       }
-    }, 400);
+    }, 300);
 
     return () => clearInterval(interval);
-  }, [currentTrack, isBornePlayback, selectedDevice, borneDeviceName, viewMode, idleTimeoutSeconds]);
+  }, [currentTrack, isBornePlayback, selectedDevice, viewMode, idleTimeoutSeconds]);
 
   // Liste combinée des appareils disponibles + custom
   const allSelectableDevices = useMemo(() => {
@@ -1093,15 +1090,17 @@ export default function App() {
           const trackDevName = (currentTrack?.deviceName || '').trim().toLowerCase();
           const targetDevName = (selectedDevice || '').trim().toLowerCase();
           const isBorne = isBornePlayback(currentTrack);
-          const isTargetBorne = targetDevName.includes('borne') || targetDevName.includes('kairo') || targetDevName === (borneDeviceName || '').trim().toLowerCase();
-          const isSpeakerMatch = Boolean(
-            isPlaying && currentTrack &&
-            (targetDevName
-              ? (isTargetBorne ? isBorne : (trackDevName === targetDevName || currentTrack.deviceId === selectedDevice || (targetDevName.length >= 3 && trackDevName.includes(targetDevName)) || (trackDevName.length >= 3 && targetDevName.includes(trackDevName))))
-              : isBorne)
+          const isTargetSpeaker = Boolean(
+            targetDevName && (
+              trackDevName === targetDevName ||
+              currentTrack?.deviceId === selectedDevice ||
+              (targetDevName.length >= 3 && trackDevName.includes(targetDevName)) ||
+              (trackDevName.length >= 3 && targetDevName.includes(trackDevName))
+            )
           );
+          const isAuthorizedPlaying = Boolean(isPlaying && currentTrack && (isBorne || isTargetSpeaker));
 
-          if (isSpeakerMatch) {
+          if (isAuthorizedPlaying) {
             setViewMode('minimized');
           } else {
             setViewMode('hidden');
