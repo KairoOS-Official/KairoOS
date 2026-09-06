@@ -199,6 +199,79 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
     };
   }, [isGameRunning]);
 
+  // 4. Détection de mouvement globale :
+  // Si un mouvement (souris, clavier, tactile, molette, manette) est détecté alors que l'affichage est maximisé,
+  // il doit immédiatement revenir en mode minimisé.
+  useEffect(() => {
+    let lastActivityTime = Date.now();
+
+    const handleUserMotion = () => {
+      const now = Date.now();
+      if (now - lastActivityTime < 30) return;
+      lastActivityTime = now;
+
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'kairo_unlock_audio' }, '*');
+        iframeRef.current.contentWindow.postMessage({ type: 'kairo_activity' }, '*');
+      }
+
+      if (viewMode === 'fullscreen') {
+        setViewMode('minimized');
+        if (iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage(
+            { type: 'kairo_set_view_mode', mode: 'minimized' },
+            '*'
+          );
+        }
+      }
+    };
+
+    const events = ['mousemove', 'mousedown', 'pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+    const onEvent = (e: Event) => {
+      if (e.type === 'keydown' && ((e as KeyboardEvent).key === 'Insert' || (e as KeyboardEvent).code === 'Insert')) {
+        return;
+      }
+      handleUserMotion();
+    };
+
+    events.forEach((evt) => window.addEventListener(evt, onEvent, { capture: true, passive: true }));
+
+    // Surveillance de la manette (Gamepad API) à 60Hz
+    const gamepadInterval = setInterval(() => {
+      try {
+        const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+        let hasGamepadInput = false;
+
+        for (const gp of gamepads) {
+          if (!gp) continue;
+          for (let i = 0; i < gp.buttons.length; i++) {
+            if (gp.buttons[i]?.pressed) {
+              hasGamepadInput = true;
+              break;
+            }
+          }
+          if (hasGamepadInput) break;
+          for (let i = 0; i < gp.axes.length; i++) {
+            if (Math.abs(gp.axes[i] || 0) > 0.25) {
+              hasGamepadInput = true;
+              break;
+            }
+          }
+          if (hasGamepadInput) break;
+        }
+
+        if (hasGamepadInput) {
+          handleUserMotion();
+        }
+      } catch (_) {}
+    }, 60);
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, onEvent, { capture: true } as any));
+      clearInterval(gamepadInterval);
+    };
+  }, [viewMode]);
+
   // 4. Écoute de l'événement personnalisé pour ouverture manuelle
   useEffect(() => {
     const handleOpenMusicPlayer = (e: Event) => {

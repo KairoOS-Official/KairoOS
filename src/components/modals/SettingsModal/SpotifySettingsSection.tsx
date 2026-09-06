@@ -7,7 +7,6 @@ import {
   AlertCircle,
   Eye,
   EyeOff,
-  Save,
   Check,
   RefreshCw,
   Speaker,
@@ -85,7 +84,7 @@ function extractSpotifyToken(input: string): string | null {
 export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
   settings: initialSettings,
   onSave,
-  saving = false,
+  saving: _saving = false,
 }) => {
   // Configuration Mode 1 (Borne Directe)
   const [deviceName, setDeviceName] = useState<string>(
@@ -639,10 +638,6 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     }
   };
 
-  // Enregistrer ou forcer la synchronisation manuelle
-  const handleSave = async () => {
-    triggerAutoSave();
-  };
 
   // --- API TEST 1 : Utilisateur (/v1/me) ---
   const handleTestUser = async () => {
@@ -1725,23 +1720,12 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
         )}
       </div>
 
-      {/* 5. BARRE D'ENREGISTREMENT INFÉRIEURE */}
-      <div className="flex items-center justify-between pt-2">
-        <div className="flex items-center gap-2 text-xs font-bold text-emerald-600">
-          <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-          <span>Auto-sauvegarde active : tous les réglages sont sauvegardés et appliqués en direct dès modification.</span>
+      {/* 5. INDICATION D'AUTO-SAUVEGARDE (ZÉRO BOUTON D'ENREGISTREMENT) */}
+      <div className="flex items-center justify-between pt-3 pb-1 border-t border-white/10">
+        <div className="flex items-center gap-2 text-xs font-bold text-emerald-500">
+          <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>Auto-sauvegarde active : tous les réglages sont automatiquement enregistrés et synchronisés dès modification.</span>
         </div>
-
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={saving}
-          style={{ backgroundColor: 'var(--accent-primary)' }}
-          className="px-5 py-2 rounded-xl text-white text-xs font-black uppercase tracking-wider shadow-sm hover:opacity-90 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
-        >
-          <Save className="w-4 h-4" />
-          <span>{saving ? 'Synchronisation...' : 'Forcer Synchro'}</span>
-        </button>
       </div>
     </div>
   );

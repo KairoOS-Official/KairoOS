@@ -183,7 +183,6 @@ export default function App() {
   const [loadingLyrics, setLoadingLyrics] = useState<boolean>(false);
   const [isFavorite, setIsFavorite] = useState<boolean>(false);
   const [isShuffle, setIsShuffle] = useState<boolean>(false);
-  const manualOpenRef = useRef<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
 
   // Références d'interpolation haute fréquence (50ms) pour une synchronisation fluide des paroles à 60fps
@@ -452,19 +451,15 @@ export default function App() {
         }));
       } else if (e.data.type === 'kairo_set_view_mode') {
         if (e.data.mode === 'fullscreen' || e.data.mode === 'minimized' || e.data.mode === 'hidden') {
-          manualOpenRef.current = e.data.mode !== 'hidden';
           setViewMode(e.data.mode);
         }
       } else if (e.data.type === 'kairo_toggle_player') {
-        manualOpenRef.current = true;
         setViewMode((prev) => (prev === 'fullscreen' ? 'minimized' : 'fullscreen'));
       } else if (e.data.type === 'kairo_activity' || e.data.type === 'dismiss_screensaver') {
         lastActivityRef.current = Date.now();
         setIdleSeconds(0);
-        // Si l'utilisateur manipule la borne pendant le plein écran, basculer vers la vue flottante
-        if (viewMode === 'fullscreen' && !manualOpenRef.current) {
-          setViewMode('minimized');
-        }
+        // Détection de mouvement : Si un mouvement est détecté alors que l'affichage est en mode maximisé, il doit immédiatement revenir en mode minimisé
+        setViewMode((prev) => (prev === 'fullscreen' ? 'minimized' : prev));
       }
     };
 
@@ -542,11 +537,11 @@ export default function App() {
     } catch (_) {}
   }, [viewMode]);
 
-  // Sauvegarde manuelle sécurisée
-  const handleManualSave = async () => {
-    setSavingManual(true);
-    setSaveErrorNotice(null);
+  // Sauvegarde automatique et persistante en direct dès modification
+  const isInitialPluginMountRef = useRef(true);
+  const autoSaveTimerRef = useRef<any>(null);
 
+  const performAutoSave = useCallback(async () => {
     const toSave: StoredConfig = {
       operationMode,
       selectedDevice,
@@ -572,6 +567,7 @@ export default function App() {
           settings: {
             operation_mode: operationMode,
             selected_device: selectedDevice,
+            target_speaker: selectedDevice,
             spotify_device_name: borneDeviceName,
             idle_timeout_seconds: idleTimeoutSeconds,
             show_cover: displaySettings.showCover,
@@ -595,23 +591,38 @@ export default function App() {
             lyrics_highlight_color: displaySettings.lyricsHighlightColor,
             lyrics_glow: displaySettings.lyricsGlow,
             spotify_access_token: spotifyToken,
+            custom_devices: customDevices,
             ...(spotifyRefreshToken ? { spotify_refresh_token: spotifyRefreshToken } : {}),
             ...(spotifyClientId ? { spotify_client_id: spotifyClientId } : {}),
             ...(spotifyTokenExpiresAt ? { spotify_token_expires_at: spotifyTokenExpiresAt } : {}),
           },
-        }).catch((err: any) => {
-          console.warn('[Tauri update_plugin_settings non-bloquant]:', err);
-        });
+        }).catch(() => {});
       }
+    } catch (_) {}
+  }, [
+    operationMode,
+    selectedDevice,
+    borneDeviceName,
+    idleTimeoutSeconds,
+    displaySettings,
+    spotifyToken,
+    spotifyRefreshToken,
+    spotifyClientId,
+    spotifyTokenExpiresAt,
+    customDevices,
+  ]);
 
-      setSaveSuccessNotice(true);
-      setTimeout(() => setSaveSuccessNotice(false), 3000);
-    } catch (err: any) {
-      setSaveErrorNotice(err?.message || 'Erreur inconnue lors de la sauvegarde');
-    } finally {
-      setSavingManual(false);
+  useEffect(() => {
+    if (isInitialPluginMountRef.current) {
+      isInitialPluginMountRef.current = false;
+      return;
     }
-  };
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(performAutoSave, 200);
+    return () => {
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    };
+  }, [performAutoSave]);
 
   // Ajout manuel d'une enceinte externe (résolution explicite du "bouton ajouter")
   const handleAddCustomDevice = () => {
@@ -954,51 +965,52 @@ export default function App() {
   };
 
   // Détection d'activité utilisateur (clavier, souris, manette)
-  const isBorneDevice = isBornePlayback(currentTrack);
-  const isBornePlaying = Boolean(currentTrack?.isPlaying && isBorneDevice);
-
   useEffect(() => {
     const onUserActivity = () => {
       lastActivityRef.current = Date.now();
       setIdleSeconds(0);
-      // Quand la borne redevient active pendant le plein écran, basculer vers le mini-lecteur flottant
-      if (viewMode === 'fullscreen' && !manualOpenRef.current) {
-        setViewMode('minimized');
-      }
+      // Détection de mouvement : Si un mouvement est détecté alors que l'affichage est en mode maximisé, il doit immédiatement revenir en mode minimisé
+      setViewMode((prev) => (prev === 'fullscreen' ? 'minimized' : prev));
     };
 
-    window.addEventListener('keydown', onUserActivity);
-    window.addEventListener('pointerdown', onUserActivity);
-    window.addEventListener('mousemove', onUserActivity);
+    window.addEventListener('keydown', onUserActivity, { capture: true, passive: true });
+    window.addEventListener('pointerdown', onUserActivity, { capture: true, passive: true });
+    window.addEventListener('mousedown', onUserActivity, { capture: true, passive: true });
+    window.addEventListener('mousemove', onUserActivity, { capture: true, passive: true });
+    window.addEventListener('wheel', onUserActivity, { capture: true, passive: true });
+    window.addEventListener('touchstart', onUserActivity, { capture: true, passive: true });
 
-    // Polling continu des manettes branchées
+    // Polling continu des manettes branchées (mouvement sticks ou appui touches)
     const gamepadInterval = setInterval(() => {
       const gamepads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
       for (const gp of gamepads) {
         if (!gp) continue;
         const buttonPressed = gp.buttons.some((b) => b.pressed);
-        const stickMoved = gp.axes.some((a) => Math.abs(a) > 0.25);
+        const stickMoved = gp.axes.some((a) => Math.abs(a) > 0.15);
         if (buttonPressed || stickMoved) {
           onUserActivity();
           break;
         }
       }
-    }, 120);
+    }, 60);
 
     return () => {
-      window.removeEventListener('keydown', onUserActivity);
-      window.removeEventListener('pointerdown', onUserActivity);
-      window.removeEventListener('mousemove', onUserActivity);
+      window.removeEventListener('keydown', onUserActivity, { capture: true });
+      window.removeEventListener('pointerdown', onUserActivity, { capture: true });
+      window.removeEventListener('mousedown', onUserActivity, { capture: true });
+      window.removeEventListener('mousemove', onUserActivity, { capture: true });
+      window.removeEventListener('wheel', onUserActivity, { capture: true });
+      window.removeEventListener('touchstart', onUserActivity, { capture: true });
       clearInterval(gamepadInterval);
     };
-  }, [isBornePlaying, viewMode, currentTrack?.id]);
+  }, []);
 
   // =========================================================================
   // LOGIQUE UNIFIÉE DU MODE HYBRIDE :
-  // 1. Joué soit sur la borne soit sur l'enceinte sélectionnée -> joué en MINIMIZE tout le temps
-  // 2. Si on ne fait rien pendant le temps de veille -> MAXIMIZE (plein écran)
-  // 3. Dès qu'une activité intervient pendant le plein écran -> retour en MINIMIZE
-  // 4. Si joué sur une AUTRE enceinte (ex: PC, téléphone) -> ON L'ENLÈVE / AFFICHE PAS (hidden)
+  // - État par défaut : l'affichage doit toujours être minimisé lorsque de la musique est jouée sur l'enceinte ou sur la borne.
+  // - Passage en mode maximisé : uniquement si l'appareil reste en veille plus longtemps que la durée définie pour le mode veille.
+  // - Détection de mouvement : immédiatement revenir en mode minimisé.
+  // - Si joué sur une autre enceinte pas sélectionnée : ON AFFICHE RIEN (hidden)
   // =========================================================================
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1022,41 +1034,37 @@ export default function App() {
 
       // CAS 1 : Joué sur la borne OU sur l'enceinte sélectionnée
       if (isAuthorizedPlaying) {
-        if (currentTrack?.id && dismissedTrackIdRef.current && dismissedTrackIdRef.current !== currentTrack.id) {
-          dismissedTrackIdRef.current = '';
-        }
-
         const now = Date.now();
         const currentIdle = Math.floor((now - lastActivityRef.current) / 1000);
         setIdleSeconds(currentIdle);
 
-        // Si on ne fait rien pendant le temps de veille -> maximize (plein écran)
+        // Passage en mode maximisé : uniquement si l'appareil reste en veille plus longtemps que la durée définie
         if (currentIdle >= idleTimeoutSeconds) {
           if (viewMode !== 'fullscreen') {
-            console.log(`🌙 [Spotify Plugin] Borne inactive (${currentIdle}s >= ${idleTimeoutSeconds}s) -> Maximize plein écran`);
+            console.log(`🌙 [Spotify Plugin] Veille (${currentIdle}s >= ${idleTimeoutSeconds}s) -> Maximisé`);
             setViewMode('fullscreen');
           }
         } else {
-          // Sinon -> on le joue en minimize tout le temps
-          if (viewMode !== 'minimized' && dismissedTrackIdRef.current !== currentTrack?.id) {
-            console.log('🎵 [Spotify Plugin] Musique en cours sur borne ou enceinte -> Minimize tout le temps');
+          // État par défaut : l'affichage doit toujours être minimisé lorsque de la musique est jouée sur l'enceinte ou sur la borne
+          if (viewMode !== 'minimized') {
+            console.log('🎵 [Spotify Plugin] Musique en cours sur borne ou enceinte -> Toujours minimisé');
             setViewMode('minimized');
           }
         }
         return;
       }
 
-      // CAS 2 : Joué sur une autre enceinte (ex: PC-Florian) OU musique arrêtée
-      // RÈGLE : Si joué sur une autre enceinte -> on l'enlève ou affiche pas
+      // CAS 2 : Joué sur une autre enceinte pas sélectionnée (ex: PC, mobile) OU musique arrêtée
+      // RÈGLE : on affiche rien
       if (audioRef.current && !audioRef.current.paused) {
         audioRef.current.pause();
       }
       setIdleSeconds(0);
-      if (viewMode !== 'hidden' && !manualOpenRef.current) {
-        console.log('🔇 [Spotify Plugin] Autre enceinte ou arrêt -> On l\'enlève / affiche pas (hidden)');
+      if (viewMode !== 'hidden') {
+        console.log('🔇 [Spotify Plugin] Autre enceinte ou arrêt -> On affiche rien (hidden)');
         setViewMode('hidden');
       }
-    }, 300);
+    }, 200);
 
     return () => clearInterval(interval);
   }, [currentTrack, isBornePlayback, selectedDevice, viewMode, idleTimeoutSeconds]);
@@ -1083,7 +1091,7 @@ export default function App() {
         lyrics={lyrics}
         currentProgressMs={progressMs}
         displaySettings={displaySettings}
-        isBornePlaying={isBornePlaying}
+        isBornePlaying={isBornePlayback(currentTrack)}
         onMinimize={() => setViewMode('minimized')}
         onExit={() => {
           const isPlaying = Boolean(currentTrack?.isPlaying);
@@ -1106,7 +1114,6 @@ export default function App() {
             setViewMode('hidden');
           }
           setIdleSeconds(0);
-          manualOpenRef.current = false;
         }}
         isDemo={Boolean(spotifyToken && tokenAnalysis.status !== 'valid_format')}
         onTogglePlay={handleTogglePlay}
@@ -1131,7 +1138,6 @@ export default function App() {
           onMaximize={() => setViewMode('fullscreen')}
           onClose={() => {
             setViewMode('hidden');
-            manualOpenRef.current = false;
             if (currentTrack?.id) dismissedTrackIdRef.current = currentTrack.id;
           }}
           isDemo={Boolean(spotifyToken && tokenAnalysis.status !== 'valid_format')}
@@ -1142,33 +1148,21 @@ export default function App() {
     );
   }
 
-  // 3. Vue Cachée si embarquée dans KaïroOS
-  const isEmbedded = typeof window !== 'undefined' && window.parent && window.parent !== window;
-  if (isEmbedded && viewMode === 'hidden') {
-    return <div className="w-full h-full bg-transparent select-none pointer-events-none" />;
-  }
-
-  // =========================================================================
-  // PAGE DE CONFIGURATION & RÉGLAGES DU PLUGIN AVEC ONGLETS ERGONOMIQUES
-  // =========================================================================
+  // 3. Vue Cachée ou en Attente de Lecture
   return (
     <div
-      className="min-h-screen p-4 sm:p-8 font-sans select-none transition-colors duration-300"
+      className="min-h-screen p-8 select-none transition-colors duration-300"
       style={{
-        backgroundColor: 'var(--kairo-bg-primary, #0b0f19)',
-        color: 'var(--kairo-text-primary, #f8fafc)',
+        backgroundColor: 'var(--kairo-bg-primary, #0f172a)',
+        color: 'var(--kairo-text-primary, #ffffff)',
       }}
     >
-      {/* En-tête avec bouton d'enregistrement et raccourci plein écran */}
-      <header
-        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 mb-6 border-b"
-        style={{ borderColor: 'var(--kairo-border-color, #334155)' }}
-      >
-        <div className="flex items-center gap-3">
+      {/* En-tête Principal */}
+      <header className="flex items-center justify-between pb-6 mb-8 border-b" style={{ borderColor: 'var(--kairo-border-color, #334155)' }}>
+        <div className="flex items-center gap-4">
           <div
-            className="p-3 rounded-2xl shadow-lg border"
+            className="w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg"
             style={{
-              borderColor: 'var(--kairo-accent-primary, #10b981)',
               backgroundColor: 'rgba(16, 185, 129, 0.15)',
               color: 'var(--kairo-accent-primary, #10b981)',
             }}
@@ -1176,36 +1170,27 @@ export default function App() {
             <Radio className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl font-black tracking-tight flex items-center gap-2">
-              <span>Configuration Spotify KaïroOS</span>
-            </h1>
-            <p className="text-xs" style={{ color: 'var(--kairo-text-secondary, #94a1b2)' }}>
-              Mode Hybride Unifié • Haut-Parleur Connect • Écran de veille karaoké dynamique
-            </p>
+            <h1 className="text-xl font-black tracking-tight">Configuration Spotify KaïroOS</h1>
+            <p className="text-xs text-slate-400">Mode Hybride Unifié • Écran de veille karaoké dynamique</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2.5">
-          <button
-            onClick={handleManualSave}
-            disabled={savingManual}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-black text-xs shadow-lg transition-all cursor-pointer text-slate-950 active:scale-95"
-            style={{ backgroundColor: 'var(--kairo-accent-primary, #10b981)' }}
+          <div
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border shadow-sm"
+            style={{
+              borderColor: 'rgba(16, 185, 129, 0.3)',
+              backgroundColor: 'rgba(16, 185, 129, 0.1)',
+              color: 'var(--kairo-accent-primary, #10b981)',
+            }}
           >
-            {savingManual ? (
-              <Sliders className="w-4 h-4 animate-spin" />
-            ) : saveSuccessNotice ? (
-              <Check className="w-4 h-4" />
-            ) : (
-              <Save className="w-4 h-4" />
-            )}
-            <span>{saveSuccessNotice ? 'Enregistré !' : 'Enregistrer'}</span>
-          </button>
+            <Check className="w-3.5 h-3.5" />
+            <span>Sauvegarde auto active</span>
+          </div>
 
           <button
             onClick={() => {
               dismissedTrackIdRef.current = '';
-              manualOpenRef.current = true;
               setViewMode('fullscreen');
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-xs shadow-lg active:scale-95 transition-all cursor-pointer"
