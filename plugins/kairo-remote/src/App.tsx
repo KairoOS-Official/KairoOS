@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Header,
   Sidebar,
@@ -12,6 +12,7 @@ import {
   AddGameView,
   SettingsView,
   KioskUnlockView,
+  ConsoleView,
 } from './components';
 import {
   ThemeMode,
@@ -21,8 +22,10 @@ import {
   RemoteConfig,
   AppSettings,
   Emulator,
+  PluginContributionPayload,
+  ContributedNavItem,
 } from './types';
-import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Puzzle } from 'lucide-react';
 import { useGamepad } from './hooks/useGamepad';
 
 export default function App() {
@@ -32,7 +35,7 @@ export default function App() {
   const [activeMode, setActiveMode] = useState<'hub' | 'admin' | 'gamepad'>('hub');
   const [pin, setPin] = useState<string>('1234');
   const [pinModalOpen, setPinModalOpen] = useState<boolean>(false);
-  const [currentTab, setCurrentTab] = useState<'dashboard' | 'games' | 'add' | 'settings' | 'unlock'>('dashboard');
+  const [currentTab, setCurrentTab] = useState<string>('dashboard');
 
   // Navigation manette physique PWA avec contournement automatique du PIN si manette connectée
   useGamepad({
@@ -58,6 +61,7 @@ export default function App() {
   const [games, setGames] = useState<Game[]>([]);
   const [recentGames, setRecentGames] = useState<Game[]>([]);
   const [systems, setSystems] = useState<System[]>([]);
+  const [contributions, setContributions] = useState<PluginContributionPayload[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
@@ -79,6 +83,21 @@ export default function App() {
       }
     } catch {
       setConnected(false);
+    }
+  }, []);
+
+  // Découverte universelle des plugins contributeurs pour kairo-remote
+  const fetchIntegrations = useCallback(async () => {
+    try {
+      const res = await fetch('/api/integrations?host=kairo-remote');
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data) {
+          setContributions(json.data);
+        }
+      }
+    } catch (e) {
+      console.warn('Erreur chargement intégrations plugins:', e);
     }
   }, []);
 
@@ -105,17 +124,35 @@ export default function App() {
         const json = await systemsRes.json();
         if (json.data) setSystems(json.data);
       }
+
+      await fetchIntegrations();
     } catch (e) {
       console.warn('Erreur chargement données:', e);
     }
-  }, []);
+  }, [fetchIntegrations]);
+
+  const contributedNavItems: ContributedNavItem[] = useMemo(() => {
+    return contributions
+      .filter((c) => c.integration_point === 'remote_nav_item' || c.integration_point === 'remote_settings_page')
+      .map((c) => ({
+        id: c.data?.id || c.from,
+        from: c.from,
+        label: c.data?.label || c.from,
+        icon: c.data?.icon,
+        badge: c.data?.badge,
+        url: c.data?.url || (c.data?.entry ? `/plugins/${c.from}/${c.data.entry}` : `/plugins/${c.from}/index.html`),
+      }));
+  }, [contributions]);
 
   useEffect(() => {
     fetchStatus();
     loadData();
-    const interval = setInterval(fetchStatus, 2000);
+    const interval = setInterval(() => {
+      fetchStatus();
+      fetchIntegrations();
+    }, 2500);
     return () => clearInterval(interval);
-  }, [fetchStatus, loadData]);
+  }, [fetchStatus, loadData, fetchIntegrations]);
 
   // 5. Authentification initiale obligatoire
   const handleLogin = async (enteredPin: string): Promise<boolean> => {
@@ -128,6 +165,7 @@ export default function App() {
       const json = await res.json();
       if (res.ok && json.success) {
         setPin(enteredPin);
+        localStorage.setItem('kairo_pin', enteredPin);
         setIsAuthenticated(true);
         setActiveMode('hub');
         showToast('Connexion réussie !');
@@ -440,6 +478,7 @@ export default function App() {
           gamesCount={games.length}
           theme={theme}
           onOpenGamepad={() => setActiveMode('gamepad')}
+          contributedNavItems={contributedNavItems}
         />
 
         {/* Zone de Contenu Principal */}
@@ -464,8 +503,10 @@ export default function App() {
               games={games}
               systems={systems}
               status={status}
+              pin={pin}
               onLaunchGame={handleLaunchGame}
               onToggleFavorite={handleToggleFavorite}
+              onReloadGames={loadData}
               loading={loading}
               theme={theme}
             />
@@ -491,6 +532,7 @@ export default function App() {
                 await loadData();
                 showToast('Données rafraîchies !');
               }}
+              onNavigateToTab={setCurrentTab}
               loading={loading}
             />
           )}
@@ -504,6 +546,41 @@ export default function App() {
               theme={theme}
             />
           )}
+
+          {currentTab === 'console' && (
+            <ConsoleView pin={pin} theme={theme} />
+          )}
+
+          {/* Vues Contribuées par des Plugins Tiers */}
+          {currentTab.startsWith('contrib:') && (() => {
+            const contribId = currentTab.replace('contrib:', '');
+            const item = contributedNavItems.find((c) => c.id === contribId);
+            if (!item) {
+              return (
+                <div className="p-8 text-center text-slate-500">
+                  Extension introuvable ou inactive.
+                </div>
+              );
+            }
+            return (
+              <div className="h-full min-h-[700px] flex flex-col rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-xs">
+                <div className="p-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-700">
+                  <div className="flex items-center gap-2">
+                    <Puzzle className="w-4 h-4 text-purple-600" />
+                    <span>{item.label}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-100 text-purple-700 font-mono">
+                      {item.from}
+                    </span>
+                  </div>
+                </div>
+                <iframe
+                  src={`${item.url}${item.url.includes('?') ? '&' : '?'}pin=${encodeURIComponent(pin)}`}
+                  className="w-full flex-1 min-h-[650px] border-none"
+                  title={item.label}
+                />
+              </div>
+            );
+          })()}
         </main>
       </div>
 
@@ -514,6 +591,7 @@ export default function App() {
         status={status}
         theme={theme}
         onOpenGamepad={() => setActiveMode('gamepad')}
+        contributedNavItems={contributedNavItems}
       />
 
       {/* Modale Modification PIN */}

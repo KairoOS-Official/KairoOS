@@ -11,3 +11,4 @@ export * from './GamesView';
 export * from './AddGameView';
 export * from './SettingsView';
 export * from './KioskUnlockView';
+export * from './ConsoleView';

@@ -34,6 +34,39 @@ pub struct PluginSettingField {
     pub secret: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PluginHostConfig {
+    pub protocol: String,
+    #[serde(default)]
+    pub discovers: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct PluginContributesConfig {
+    #[serde(default)]
+    pub to: Vec<String>,
+    #[serde(flatten)]
+    pub points: HashMap<String, Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PluginContributionPayload {
+    pub from: String,
+    pub to: String,
+    pub integration_point: String,
+    pub data: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginSettingsSection {
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub icon: Option<String>,
+    #[serde(default)]
+    pub order: Option<i32>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginManifest {
     pub id: String,
@@ -54,9 +87,17 @@ pub struct PluginManifest {
     #[serde(default)]
     pub commands: Vec<String>,
     #[serde(default)]
+    pub settings_section: Option<PluginSettingsSection>,
+    #[serde(default)]
     pub settings_schema: HashMap<String, PluginSettingField>,
     #[serde(default)]
     pub sandbox: bool,
+    #[serde(default)]
+    pub host: Option<PluginHostConfig>,
+    #[serde(default)]
+    pub contributes: Option<PluginContributesConfig>,
+    #[serde(default)]
+    pub builtin_service: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +121,9 @@ pub struct PluginInfo {
     pub commands: Vec<String>,
     pub ui: Option<String>,
     pub has_settings: bool,
+    pub settings_section: Option<PluginSettingsSection>,
+    pub host: Option<PluginHostConfig>,
+    pub contributes: Option<PluginContributesConfig>,
     pub path: String,
 }
 
@@ -104,6 +148,8 @@ pub struct PluginManager {
     launcher: Option<Launcher>,
     processes: Arc<Mutex<HashMap<String, RunningProcess>>>,
     builtin_running: Arc<Mutex<HashMap<String, bool>>>,
+    /// Canaux de shutdown pour services builtin (clé = id du plugin)
+    builtin_shutdown_txs: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>,
 }
 
 impl PluginManager {
@@ -113,6 +159,7 @@ impl PluginManager {
             launcher,
             processes: Arc::new(Mutex::new(HashMap::new())),
             builtin_running: Arc::new(Mutex::new(HashMap::new())),
+            builtin_shutdown_txs: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -132,21 +179,21 @@ impl PluginManager {
             }
         }
 
-        // Configuration initiale par défaut
+        // Configuration initiale par défaut générée dynamiquement selon les manifests découverts
         let mut defaults = HashMap::new();
-        defaults.insert(
-            "kairo-remote".to_string(),
-            PluginConfigRecord {
-                enabled: true,
-                settings: {
-                    let mut s = HashMap::new();
-                    s.insert("port".into(), Value::from(8080));
-                    s.insert("pin".into(), Value::from("1234"));
-                    s.insert("enabled".into(), Value::from(true));
-                    s
+        for (manifest, _) in Self::discover_manifests() {
+            let mut s = HashMap::new();
+            for (k, field) in &manifest.settings_schema {
+                s.insert(k.clone(), field.default.clone());
+            }
+            defaults.insert(
+                manifest.id,
+                PluginConfigRecord {
+                    enabled: true,
+                    settings: s,
                 },
-            },
-        );
+            );
+        }
         let _ = Self::save_plugins_config(&defaults);
         defaults
     }
@@ -172,10 +219,15 @@ impl PluginManager {
                         let manifest_path = path.join("plugin.json");
                         if manifest_path.exists() {
                             if let Ok(content) = std::fs::read_to_string(&manifest_path) {
-                                if let Ok(manifest) = serde_json::from_str::<PluginManifest>(&content) {
-                                    if !seen_ids.contains(&manifest.id) {
-                                        seen_ids.insert(manifest.id.clone());
-                                        results.push((manifest, path));
+                                match serde_json::from_str::<PluginManifest>(&content) {
+                                    Ok(manifest) => {
+                                        if !seen_ids.contains(&manifest.id) {
+                                            seen_ids.insert(manifest.id.clone());
+                                            results.push((manifest, path));
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("⚠️ [PluginManager] Erreur parsing manifest {:?}: {}", manifest_path, e);
                                     }
                                 }
                             }
@@ -191,7 +243,15 @@ impl PluginManager {
     pub fn list_plugins(&self) -> Vec<PluginInfo> {
         let manifests = Self::discover_manifests();
         let config = Self::load_plugins_config();
-        let processes = self.processes.lock().unwrap();
+        let mut processes = self.processes.lock().unwrap();
+        // Nettoyer les processus terminés
+        processes.retain(|_id, proc| {
+            match proc.child.try_wait() {
+                Ok(Some(_)) => false,
+                Ok(None) => true,
+                Err(_) => false,
+            }
+        });
         let builtin = self.builtin_running.lock().unwrap();
 
         manifests
@@ -218,6 +278,9 @@ impl PluginManager {
                     commands: manifest.commands,
                     ui: manifest.ui,
                     has_settings: !manifest.settings_schema.is_empty(),
+                    settings_section: manifest.settings_section.clone(),
+                    host: manifest.host.clone(),
+                    contributes: manifest.contributes.clone(),
                     path: path.to_string_lossy().to_string(),
                 }
             })
@@ -263,15 +326,27 @@ impl PluginManager {
             .find(|(m, _)| m.id == id)
             .ok_or_else(|| format!("Plugin '{}' introuvable", id))?;
 
-        // 1. Cas du plugin Builtin (ex: kairo-remote)
-        if manifest.plugin_type == PluginType::Builtin {
-            if manifest.id == "kairo-remote" {
-                if let (Some(db), Some(launcher)) = (&self.db, &self.launcher) {
-                    crate::remote::start_remote_server(db.clone(), launcher.clone());
+        // 1. Cas d'un service builtin interne (ex: remote_server)
+        if let Some(service_type) = &manifest.builtin_service {
+            match service_type.as_str() {
+                "remote_server" => {
+                    if let (Some(db), Some(launcher)) = (&self.db, &self.launcher) {
+                        let (_handle, shutdown_tx) = crate::remote::start_remote_server_with_shutdown(
+                            db.clone(),
+                            launcher.clone(),
+                        );
+                        self.builtin_shutdown_txs.lock().unwrap().insert(id.to_string(), shutdown_tx);
+                    }
+                }
+                _ => {
+                    eprintln!("⚠️ [PluginManager] Type de service builtin inconnu: {}", service_type);
                 }
             }
             self.builtin_running.lock().unwrap().insert(id.to_string(), true);
-            println!("✅ [PluginManager] Plugin builtin '{}' démarré.", id);
+            println!("✅ [PluginManager] Service builtin '{}' ({}) démarré.", id, service_type);
+
+            // Découverte universelle : notifier l'hôte de ses contributeurs
+            self.notify_host_of_contributions(id);
             return Ok(());
         }
 
@@ -287,7 +362,12 @@ impl PluginManager {
         }
 
         let mut cmd = if entry_rel.ends_with(".js") {
-            let mut c = Command::new("node");
+            let node_bin = if std::path::Path::new(r"C:\Program Files\nodejs\node.exe").exists() {
+                r"C:\Program Files\nodejs\node.exe"
+            } else {
+                "node"
+            };
+            let mut c = Command::new(node_bin);
             c.arg(&entry_path);
             c
         } else if entry_rel.ends_with(".py") {
@@ -298,20 +378,51 @@ impl PluginManager {
             Command::new(&entry_path)
         };
 
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+
         cmd.current_dir(&path);
         cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
-        cmd.stderr(Stdio::inherit());
+        cmd.stderr(Stdio::piped());
 
-        let mut child = cmd.spawn().map_err(|e| format!("Échec du lancement du plugin {}: {}", id, e))?;
+        let mut child = cmd.spawn().map_err(|e| {
+            let err_msg = format!("Échec du lancement du plugin {}: {}", id, e);
+            AppPaths::log("ERROR", &err_msg);
+            err_msg
+        })?;
         let stdin = child.stdin.take().ok_or("Impossible d'attacher stdin au plugin")?;
         let stdout = child.stdout.take().ok_or("Impossible d'attacher stdout au plugin")?;
+        let stderr = child.stderr.take();
+
+        if let Some(err_stream) = stderr {
+            let plugin_err_id = id.to_string();
+            std::thread::spawn(move || {
+                let reader = BufReader::new(err_stream);
+                for line in reader.lines().flatten() {
+                    let trimmed = line.trim();
+                    if !trimmed.is_empty() {
+                        AppPaths::log("PLUGIN_STDERR", &format!("[{}] {}", plugin_err_id, trimmed));
+                    }
+                }
+            });
+        }
 
         // Enregistre le processus supervisé
         self.processes.lock().unwrap().insert(
             id.to_string(),
             RunningProcess { child, stdin },
         );
+        AppPaths::log("INFO", &format!("Plugin '{}' lancé avec succès.", id));
+
+        // Notifier si cet hôte a des contributions en attente
+        self.notify_host_of_contributions(id);
+
+        // Notifier les autres hôtes si ce nouveau plugin contribue à eux
+        self.notify_hosts_when_contributor_starts(&manifest);
 
         // Thread de lecture des messages JSON stdout émis par le plugin (IPC)
         let plugin_id = id.to_string();
@@ -364,26 +475,50 @@ impl PluginManager {
         Ok(())
     }
 
-    /// Stoppe un plugin en cours d'exécution
     pub fn stop_plugin(&self, id: &str) -> Result<(), String> {
-        let mut processes = self.processes.lock().unwrap();
-        if let Some(mut proc) = processes.remove(id) {
-            let _ = proc.child.kill();
-            println!("🛑 [PluginManager] Processus enfant du plugin '{}' terminé.", id);
+        {
+            let mut processes = self.processes.lock().unwrap();
+            if let Some(mut proc) = processes.remove(id) {
+                let _ = proc.child.kill();
+                println!("🛑 [PluginManager] Processus enfant du plugin '{}' terminé.", id);
+            }
         }
 
-        let mut builtin = self.builtin_running.lock().unwrap();
-        builtin.insert(id.to_string(), false);
+        // Si c'est un service builtin : envoyer le signal d'arrêt
+        if let Some(tx) = self.builtin_shutdown_txs.lock().unwrap().remove(id) {
+            let _ = tx.send(());
+            println!("🛑 [PluginManager] Signal d'arrêt envoyé au service builtin '{}'.", id);
+        }
+
+        {
+            let mut builtin = self.builtin_running.lock().unwrap();
+            builtin.insert(id.to_string(), false);
+        }
         println!("🛑 [PluginManager] Plugin '{}' arrêté.", id);
+
+        // Notifier les hôtes concernés du retrait de ce contributeur
+        self.notify_hosts_when_contributor_stops(id);
+
         Ok(())
     }
 
     /// Redémarre un plugin
     pub fn restart_plugin(&self, id: &str) -> Result<(), String> {
         self.stop_plugin(id)?;
-        std::thread::sleep(std::time::Duration::from_millis(150));
+        // Attendre que le port TCP soit libéré avant de rebinder
+        std::thread::sleep(std::time::Duration::from_millis(500));
         self.start_plugin(id)?;
         Ok(())
+    }
+
+    /// Redémarre tous les plugins fournissant un service builtin donné (ex: "remote_server")
+    pub fn restart_by_builtin_service(&self, service_type: &str) {
+        let manifests = Self::discover_manifests();
+        for (m, _) in manifests {
+            if m.builtin_service.as_deref() == Some(service_type) {
+                let _ = self.restart_plugin(&m.id);
+            }
+        }
     }
 
     /// Active un plugin et enregistre son activation
@@ -421,15 +556,153 @@ impl PluginManager {
     /// Met à jour les paramètres de configuration d'un plugin
     pub fn update_plugin_settings(&self, id: &str, new_settings: HashMap<String, Value>) -> Result<(), String> {
         let mut config = Self::load_plugins_config();
-        let entry = config.entry(id.to_string()).or_insert_with(|| PluginConfigRecord {
-            enabled: true,
-            settings: HashMap::new(),
-        });
-        entry.settings = new_settings;
+        {
+            let entry = config.entry(id.to_string()).or_insert_with(|| PluginConfigRecord {
+                enabled: true,
+                settings: HashMap::new(),
+            });
+            for (k, v) in new_settings {
+                entry.settings.insert(k, v);
+            }
+        }
         Self::save_plugins_config(&config)?;
+
         // Redémarre si actuellement en cours
         let _ = self.restart_plugin(id);
         Ok(())
+    }
+
+    /// Envoie un événement JSON sur le stdin d'un processus plugin hôte
+    pub fn send_event_to_plugin(&self, plugin_id: &str, event_json: &Value) -> bool {
+        let mut processes = self.processes.lock().unwrap();
+        if let Some(proc) = processes.get_mut(plugin_id) {
+            use std::io::Write;
+            if let Ok(json_line) = serde_json::to_string(event_json) {
+                if writeln!(proc.stdin, "{}", json_line).is_ok() {
+                    let _ = proc.stdin.flush();
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Découvre toutes les contributions destinées à un plugin hôte donné
+    pub fn discover_contributions_for_host(host_id: &str) -> Vec<PluginContributionPayload> {
+        let manifests = Self::discover_manifests();
+        let config = Self::load_plugins_config();
+
+        let host_manifest = match manifests.iter().find(|(m, _)| m.id == host_id) {
+            Some((m, _)) => m,
+            None => return Vec::new(),
+        };
+
+        let host_cfg = match &host_manifest.host {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+
+        let mut results = Vec::new();
+
+        for (contrib_manifest, _) in &manifests {
+            if contrib_manifest.id == host_id {
+                continue;
+            }
+
+            let is_enabled = config
+                .get(&contrib_manifest.id)
+                .map(|c| c.enabled)
+                .unwrap_or(true);
+
+            if !is_enabled {
+                continue;
+            }
+
+            if let Some(contributes) = &contrib_manifest.contributes {
+                if contributes.to.iter().any(|t| t == host_id) {
+                    for point in &host_cfg.discovers {
+                        let point_data = contributes.points.get(point).or_else(|| {
+                            contributes.points.get("points").and_then(|nested| nested.get(point))
+                        });
+                        if let Some(data) = point_data {
+                            results.push(PluginContributionPayload {
+                                from: contrib_manifest.id.clone(),
+                                to: host_id.to_string(),
+                                integration_point: point.clone(),
+                                data: data.clone(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        results
+    }
+
+    /// Découvre toutes les contributions destinées à un plugin hôte donné (sur l'instance)
+    pub fn get_contributions_for_host(&self, host_id: &str) -> Vec<PluginContributionPayload> {
+        Self::discover_contributions_for_host(host_id)
+    }
+
+    /// Notifie un plugin hôte de toutes les contributions existantes à son démarrage
+    fn notify_host_of_contributions(&self, host_id: &str) {
+        let contributions = self.get_contributions_for_host(host_id);
+        for item in contributions {
+            let event = serde_json::json!({
+                "event": "plugin_contributes",
+                "from": item.from,
+                "integration_point": item.integration_point,
+                "data": item.data
+            });
+            self.send_event_to_plugin(host_id, &event);
+        }
+    }
+
+    /// Notifie tous les hôtes concernés lorsqu'un plugin contributeur démarre
+    fn notify_hosts_when_contributor_starts(&self, contrib_manifest: &PluginManifest) {
+        if let Some(contributes) = &contrib_manifest.contributes {
+            let manifests = Self::discover_manifests();
+            for target_host_id in &contributes.to {
+                if let Some((host_manifest, _)) = manifests.iter().find(|(m, _)| &m.id == target_host_id) {
+                    if let Some(host_cfg) = &host_manifest.host {
+                        for point in &host_cfg.discovers {
+                            let point_data = contributes.points.get(point).or_else(|| {
+                                contributes.points.get("points").and_then(|nested| nested.get(point))
+                            });
+                            if let Some(data) = point_data {
+                                let event = serde_json::json!({
+                                    "event": "plugin_contributes",
+                                    "from": contrib_manifest.id,
+                                    "integration_point": point,
+                                    "data": data
+                                });
+                                self.send_event_to_plugin(target_host_id, &event);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Notifie tous les hôtes concernés lorsqu'un plugin contributeur s'arrête
+    fn notify_hosts_when_contributor_stops(&self, contributor_id: &str) {
+        let manifests = Self::discover_manifests();
+        let contrib_manifest = match manifests.iter().find(|(m, _)| m.id == contributor_id) {
+            Some((m, _)) => m,
+            None => return,
+        };
+
+        if let Some(contributes) = &contrib_manifest.contributes {
+            for target_host_id in &contributes.to {
+                let event = serde_json::json!({
+                    "event": "plugin_removed",
+                    "from": contributor_id
+                });
+                self.send_event_to_plugin(target_host_id, &event);
+            }
+        }
     }
 
     /// Désinstalle un plugin (supprime son dossier et ses données)
@@ -560,7 +833,9 @@ impl PluginManager {
             let is_enabled = config.get(&manifest.id).map(|r| r.enabled).unwrap_or(true);
             if is_enabled {
                 if let Err(e) = self.start_plugin(&manifest.id) {
-                    eprintln!("⚠️ [PluginManager] Erreur au démarrage de '{}': {}", manifest.id, e);
+                    let err_msg = format!("Erreur au démarrage du plugin '{}': {}", manifest.id, e);
+                    eprintln!("⚠️ [PluginManager] {}", err_msg);
+                    AppPaths::log("ERROR", &format!("[PluginManager] {}", err_msg));
                 }
             }
         }
@@ -606,7 +881,7 @@ mod tests {
     fn test_builtin_config_records() {
         let mut map = HashMap::new();
         map.insert(
-            "kairo-remote".to_string(),
+            "sample-plugin".to_string(),
             PluginConfigRecord {
                 enabled: true,
                 settings: HashMap::new(),
@@ -615,6 +890,63 @@ mod tests {
 
         let json = serde_json::to_string(&map).unwrap();
         let parsed: HashMap<String, PluginConfigRecord> = serde_json::from_str(&json).unwrap();
-        assert!(parsed.get("kairo-remote").unwrap().enabled);
+        assert!(parsed.get("sample-plugin").unwrap().enabled);
+    }
+
+    #[test]
+    fn test_host_and_contributor_protocol_parsing() {
+        let host_json = r#"{
+            "id": "my-host",
+            "name": "Host Plugin",
+            "version": "1.0.0",
+            "author": "Tester",
+            "description": "Host test",
+            "host": {
+                "protocol": "kairo-plugin-host-v1",
+                "discovers": ["remote_settings_page", "remote_api_routes"]
+            }
+        }"#;
+
+        let host_manifest: PluginManifest = serde_json::from_str(host_json).unwrap();
+        let host_cfg = host_manifest.host.unwrap();
+        assert_eq!(host_cfg.protocol, "kairo-plugin-host-v1");
+        assert_eq!(host_cfg.discovers, vec!["remote_settings_page", "remote_api_routes"]);
+
+        let contrib_json = r#"{
+            "id": "my-achievements",
+            "name": "Achievements",
+            "version": "1.0.0",
+            "author": "Tester",
+            "description": "Contributor test",
+            "contributes": {
+                "to": ["my-host"],
+                "remote_settings_page": {
+                    "label": "Succès & Trophées",
+                    "ui": "achievements.html"
+                },
+                "remote_api_routes": {
+                    "routes": [
+                        { "path": "/achievements", "handler": "get_achievements" }
+                    ]
+                }
+            }
+        }"#;
+
+        let contrib_manifest: PluginManifest = serde_json::from_str(contrib_json).unwrap();
+        let contrib_cfg = contrib_manifest.contributes.unwrap();
+        assert_eq!(contrib_cfg.to, vec!["my-host"]);
+        assert!(contrib_cfg.points.contains_key("remote_settings_page"));
+        assert!(contrib_cfg.points.contains_key("remote_api_routes"));
+    }
+
+    #[test]
+    fn test_plugin_discovery_and_detail() {
+        let pm = PluginManager::new(None, None);
+        let list = pm.list_plugins();
+        assert!(!list.is_empty());
+        let remote = pm.get_plugin("kairo-remote");
+        assert!(remote.is_some());
+        let scraper = pm.get_plugin("kairo-scraper");
+        assert!(scraper.is_some());
     }
 }

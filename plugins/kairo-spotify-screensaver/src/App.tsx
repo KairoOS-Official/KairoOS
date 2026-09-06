@@ -186,22 +186,31 @@ export default function App() {
   const manualOpenRef = useRef<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
 
-  // Détection robuste si la lecture s'effectue sur la borne
+  // Détection robuste et stricte si la lecture s'effectue sur la borne (Web Playback SDK)
   const isBornePlayback = useCallback(
     (track: SpotifyTrack | null) => {
       if (!track) return false;
+      // 1. Appareil Web Playback SDK officiel de la borne
       if (track.deviceId === 'web-playback-device') return true;
       if (webPlaybackDeviceId && track.deviceId === webPlaybackDeviceId) return true;
-      const name = (track.deviceName || '').toLowerCase();
-      const cleanBorne = (borneDeviceName || '').toLowerCase().replace(/ï/g, 'i');
+
+      // 2. Nom spécifique de la borne configuré par l'utilisateur
+      const name = (track.deviceName || '').toLowerCase().trim();
+      const cleanBorne = (borneDeviceName || '').toLowerCase().trim().replace(/ï/g, 'i');
+      if (cleanBorne && cleanBorne.length >= 3) {
+        const cleanName = name.replace(/ï/g, 'i');
+        if (cleanName === cleanBorne || cleanName.includes(cleanBorne)) {
+          return true;
+        }
+      }
+
+      // 3. Nom de l'OS Kaïro
       return Boolean(
         name &&
-          (name.includes('borne') ||
-            name.includes('kairo') ||
-            name.includes('pc-florian') ||
-            name.includes('ce pc') ||
-            (cleanBorne ? name.replace(/ï/g, 'i').includes(cleanBorne) : false) ||
-            name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes('borne'))
+          (name.includes('borne kaïro') ||
+            name.includes('borne kairo') ||
+            name.includes('kairoos') ||
+            name.includes('kairo-borne'))
       );
     },
     [webPlaybackDeviceId, borneDeviceName]
@@ -539,8 +548,9 @@ export default function App() {
   const handleAddCustomDevice = () => {
     const trimmed = newDeviceInput.trim();
     if (!trimmed) return;
+    let updated = customDevices;
     if (!customDevices.includes(trimmed)) {
-      const updated = [...customDevices, trimmed];
+      updated = [...customDevices, trimmed];
       setCustomDevices(updated);
       try {
         localStorage.setItem(CUSTOM_DEVICES_KEY, JSON.stringify(updated));
@@ -550,6 +560,22 @@ export default function App() {
     setNewDeviceInput('');
     setAddDeviceNotice(`✓ Enceinte « ${trimmed} » ajoutée et sélectionnée pour la surveillance !`);
     setTimeout(() => setAddDeviceNotice(null), 3500);
+
+    try {
+      const tauriInvoke =
+        (window as any).__TAURI__?.core?.invoke ||
+        (window.parent as any)?.__TAURI__?.core?.invoke;
+      if (tauriInvoke) {
+        tauriInvoke('update_plugin_settings', {
+          id: 'kairo-spotify-screensaver',
+          settings: {
+            selected_device: trimmed,
+            target_speaker: trimmed,
+            custom_devices: updated,
+          },
+        }).catch(() => {});
+      }
+    } catch (_) {}
   };
 
   // Exécution d'un test d'API
@@ -884,14 +910,16 @@ export default function App() {
       const isPlaying = Boolean(currentTrack?.isPlaying);
 
       // Vérification stricte si l'appareil de lecture correspond à l'enceinte sélectionnée
+      const trackDevName = (currentTrack?.deviceName || '').trim().toLowerCase();
+      const targetDevName = (selectedDevice || '').trim().toLowerCase();
       const isTargetExternalSpeaker = Boolean(
         !isBorne &&
         currentTrack &&
-        selectedDevice &&
+        targetDevName &&
         (
-          currentTrack.deviceName.trim().toLowerCase() === selectedDevice.trim().toLowerCase() ||
+          trackDevName === targetDevName ||
           currentTrack.deviceId === selectedDevice ||
-          (currentTrack.deviceName && selectedDevice && currentTrack.deviceName.toLowerCase().includes(selectedDevice.toLowerCase()))
+          (targetDevName.length >= 4 && trackDevName.includes(targetDevName))
         )
       );
 
@@ -919,11 +947,12 @@ export default function App() {
         return;
       }
 
-      // CAS 3 : Musique sur une enceinte externe NON sélectionnée (ex: téléphone, autre pièce) OU aucune musique
+      // CAS 3 : Musique sur une enceinte externe NON sélectionnée (ex: PC-FLORIAN, téléphone) OU aucune musique
       // RÈGLE EXPLICITE DE L'UTILISATEUR : « si la musique est sur une enceinte qui n'est pas sélectionnée alors on ne l'affiche pas »
       if (!isPlaying || (!isBorne && !isTargetExternalSpeaker)) {
         setIdleSeconds(0);
-        if (viewMode === 'fullscreen' && !manualOpenRef.current) {
+        if (viewMode !== 'hidden' && !manualOpenRef.current) {
+          console.log('🔇 [Spotify Plugin] Enceinte non sélectionnée ou arrêt -> Masquage complet');
           setViewMode('hidden');
         }
       }

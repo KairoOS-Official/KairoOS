@@ -5,8 +5,46 @@ pub mod commands;
 use commands::AppState;
 use kairo_core::{Database, Launcher};
 
+fn init_logging_and_panic_hook() {
+    let logs_dir = kairo_core::AppPaths::get_logs_dir();
+    let _ = std::fs::create_dir_all(&logs_dir);
+    let crash_file = logs_dir.join("crash.log");
+
+    kairo_core::AppPaths::log("INFO", "=== Démarrage de KaïroOS ===");
+
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Panique inconnue".to_string()
+        };
+        let location = if let Some(loc) = panic_info.location() {
+            format!("{}:{}:{}", loc.file(), loc.line(), loc.column())
+        } else {
+            "localisation inconnue".to_string()
+        };
+
+        let msg = format!("[{}] [PANIC] {} à {}", now, payload, location);
+        eprintln!("{}", msg);
+        kairo_core::AppPaths::log("PANIC", &format!("{} à {}", payload, location));
+
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&crash_file) {
+            let _ = writeln!(f, "{}", msg);
+        }
+
+        default_hook(panic_info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_logging_and_panic_hook();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -120,6 +158,7 @@ pub fn run() {
             commands::get_plugin_commands,
             commands::run_plugin_command,
             commands::open_plugins_folder,
+            commands::get_plugin_contributions,
         ])
         .run(tauri::generate_context!())
 

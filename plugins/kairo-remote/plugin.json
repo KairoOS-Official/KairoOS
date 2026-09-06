@@ -14,6 +14,16 @@
     "write_settings"
   ],
   "entry": "builtin",
+  "builtin_service": "remote_server",
+  "host": {
+    "protocol": "kairo-plugin-host-v1",
+    "discovers": [
+      "remote_settings_page",
+      "remote_api_routes",
+      "remote_nav_item",
+      "remote_quick_action"
+    ]
+  },
   "ui": "dist/index.html",
   "commands": [
     "start",
@@ -21,6 +31,10 @@
     "restart",
     "status"
   ],
+  "settings_section": {
+    "label": "Réseau & Remote",
+    "icon": "wifi"
+  },
   "settings_schema": {
     "port": {
       "type": "number",

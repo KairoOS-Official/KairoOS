@@ -1,6 +1,23 @@
 import React from 'react';
-import { LayoutDashboard, Gamepad2, PlusCircle, Sliders, Lock, Shield, Smartphone } from 'lucide-react';
-import { ThemeMode, StatusResponse } from '../types';
+import { LayoutDashboard, Gamepad2, PlusCircle, Sliders, Lock, Shield, Smartphone, Terminal, Puzzle, Globe, Trophy, Sparkles, Tv, Download } from 'lucide-react';
+import { ThemeMode, StatusResponse, ContributedNavItem } from '../types';
+
+const renderContributedIcon = (iconName?: string) => {
+  switch (iconName?.toLowerCase()) {
+    case 'globe':
+      return <Globe className="w-5 h-5 text-indigo-500" />;
+    case 'trophy':
+      return <Trophy className="w-5 h-5 text-amber-500" />;
+    case 'sparkles':
+      return <Sparkles className="w-5 h-5 text-pink-500" />;
+    case 'download':
+      return <Download className="w-5 h-5 text-emerald-500" />;
+    case 'tv':
+      return <Tv className="w-5 h-5 text-cyan-500" />;
+    default:
+      return <Puzzle className="w-5 h-5 text-purple-500" />;
+  }
+};
 
 interface BottomNavProps {
   currentTab: string;
@@ -8,6 +25,7 @@ interface BottomNavProps {
   status: StatusResponse | null;
   theme: ThemeMode;
   onOpenGamepad: () => void;
+  contributedNavItems?: ContributedNavItem[];
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -16,6 +34,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   status,
   theme,
   onOpenGamepad,
+  contributedNavItems,
 }) => {
   const isDark = theme === 'dark';
 
@@ -24,6 +43,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
     { id: 'games', label: 'Jeux', icon: Gamepad2 },
     { id: 'add', label: 'Ajouter', icon: PlusCircle },
     { id: 'settings', label: 'Réglages', icon: Sliders },
+    { id: 'console', label: 'Console', icon: Terminal },
   ];
 
   return (
@@ -47,6 +67,22 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               )}
             </div>
             <span className="text-[10px] font-semibold">{item.label}</span>
+          </button>
+        );
+      })}
+
+      {contributedNavItems?.map((item) => {
+        const isActive = currentTab === `contrib:${item.id}`;
+        return (
+          <button
+            key={item.id}
+            onClick={() => onSelectTab(`contrib:${item.id}`)}
+            className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-colors relative ${
+              isActive ? 'text-purple-600 font-bold' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            {renderContributedIcon(item.icon)}
+            <span className="text-[10px] font-semibold truncate max-w-[50px]">{item.label}</span>
           </button>
         );
       })}

@@ -1,8 +1,9 @@
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use tokio::sync::oneshot;
 use axum::{
     extract::{Path as AxumPath, Query, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{IntoResponse, Json},
     routing::{get, post},
     Router,
@@ -271,11 +272,25 @@ fn get_local_ip() -> String {
     "127.0.0.1".to_string()
 }
 
-/// Vérifie le code PIN via le header X-Kairo-Pin
+/// Vérifie le code PIN via le header X-Kairo-Pin ou le cookie kairo_pin
 fn verify_pin(headers: &HeaderMap, required_pin: &str) -> bool {
     if let Some(val) = headers.get("X-Kairo-Pin") {
         if let Ok(pin_str) = val.to_str() {
-            return pin_str.trim() == required_pin.trim();
+            if pin_str.trim() == required_pin.trim() {
+                return true;
+            }
+        }
+    }
+    if let Some(cookie_header) = headers.get(header::COOKIE) {
+        if let Ok(cookies) = cookie_header.to_str() {
+            for cookie in cookies.split(';') {
+                let parts: Vec<&str> = cookie.trim().splitn(2, '=').collect();
+                if parts.len() == 2 && parts[0] == "kairo_pin" {
+                    if parts[1].trim() == required_pin.trim() {
+                        return true;
+                    }
+                }
+            }
         }
     }
     false
@@ -283,7 +298,18 @@ fn verify_pin(headers: &HeaderMap, required_pin: &str) -> bool {
 
 /// Démarre le serveur Axum en tâche de fond dans son propre runtime Tokio
 pub fn start_remote_server(db: Database, launcher: Launcher) -> std::thread::JoinHandle<()> {
-    std::thread::spawn(move || {
+    let (handle, _tx) = start_remote_server_with_shutdown(db, launcher);
+    handle
+}
+
+/// Retourne un oneshot::Sender qui, lorsqu'il est consommé, arrête le serveur distant proprement
+pub fn start_remote_server_with_shutdown(
+    db: Database,
+    launcher: Launcher,
+) -> (std::thread::JoinHandle<()>, oneshot::Sender<()>) {
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+
+    let handle = std::thread::spawn(move || {
         let rt = match tokio::runtime::Builder::new_multi_thread()
             .worker_threads(2)
             .enable_all()
@@ -312,18 +338,40 @@ pub fn start_remote_server(db: Database, launcher: Launcher) -> std::thread::Joi
                 config_dir: PathBuf::from("config"),
             };
 
-            // Recherche du dossier statique PWA (plugins/kairo-remote/dist ou kairo-remote/dist)
-            let mut pwa_dir = crate::paths::AppPaths::get_plugins_dir().join("kairo-remote").join("dist");
+            // Recherche dynamique du dossier PWA servi par le service builtin "remote_server"
+            let mut pwa_dir = PathBuf::new();
+            let manifests = crate::plugins::PluginManager::discover_manifests();
+            for (manifest, plugin_dir) in &manifests {
+                if manifest.builtin_service.as_deref() == Some("remote_server") {
+                    let candidate = plugin_dir.join(manifest.ui.as_deref().unwrap_or("dist"));
+                    if candidate.is_file() {
+                        if let Some(parent) = candidate.parent() {
+                            pwa_dir = parent.to_path_buf();
+                            break;
+                        }
+                    } else if candidate.is_dir() {
+                        pwa_dir = candidate;
+                        break;
+                    }
+                }
+            }
             if !pwa_dir.exists() {
-                let dev_plugin_pwa = crate::paths::AppPaths::get_dev_project_dir().join("plugins").join("kairo-remote").join("dist");
-                if dev_plugin_pwa.exists() {
-                    pwa_dir = dev_plugin_pwa;
-                } else if PathBuf::from("plugins/kairo-remote/dist").exists() {
-                    pwa_dir = PathBuf::from("plugins/kairo-remote/dist");
-                } else if PathBuf::from("kairo-remote/dist").exists() {
-                    pwa_dir = PathBuf::from("kairo-remote/dist");
-                } else if PathBuf::from("../kairo-remote/dist").exists() {
-                    pwa_dir = PathBuf::from("../kairo-remote/dist");
+                for base in &[
+                    crate::paths::AppPaths::get_plugins_dir(),
+                    crate::paths::AppPaths::get_dev_project_dir().join("plugins"),
+                ] {
+                    if let Ok(entries) = std::fs::read_dir(base) {
+                        for entry in entries.flatten() {
+                            let dist = entry.path().join("dist");
+                            if dist.join("index.html").exists() {
+                                pwa_dir = dist;
+                                break;
+                            }
+                        }
+                    }
+                    if pwa_dir.exists() {
+                        break;
+                    }
                 }
             }
 
@@ -341,6 +389,7 @@ pub fn start_remote_server(db: Database, launcher: Launcher) -> std::thread::Joi
                 .route("/api/games/recent", get(get_recent_games))
                 .route("/api/games/:id", get(get_game_by_id))
                 .route("/api/games/:id/favorite", post(toggle_game_favorite))
+                .route("/api/games/:id/edit", post(update_game_details))
                 .route("/api/games/launch", post(launch_game))
                 .route("/api/games/stop", post(stop_game))
                 .route("/api/games/add", post(add_game))
@@ -353,20 +402,40 @@ pub fn start_remote_server(db: Database, launcher: Launcher) -> std::thread::Joi
                 .route("/api/kiosk/lock", post(lock_kiosk))
                 .route("/api/kiosk/unlock", post(unlock_kiosk))
                 .route("/api/media/cover", get(get_cover_image))
+                .route("/api/console", post(console_exec))
                 // Endpoints thèmes — lecture et modification à distance depuis l'admin réseau
                 .route("/api/themes", get(remote_get_themes))
                 .route("/api/themes/active", get(remote_get_active_theme).post(remote_set_active_theme))
                 .route("/api/themes/:id", get(remote_get_theme).post(remote_save_theme).delete(remote_delete_theme))
+                .route("/api/integrations", get(get_integrations))
+                .route("/api/plugins", get(remote_get_plugins))
+                .route("/api/plugins/:id/toggle", post(remote_toggle_plugin))
+                .route("/api/plugins/:id/settings", get(remote_get_plugin_settings).put(remote_update_plugin_settings))
                 .with_state(state.clone());
+
+            let plugins_dir = {
+                let dev_plugins = crate::paths::AppPaths::get_dev_project_dir().join("plugins");
+                if dev_plugins.exists() {
+                    dev_plugins
+                } else {
+                    let p = crate::paths::AppPaths::get_plugins_dir();
+                    let _ = std::fs::create_dir_all(&p);
+                    p
+                }
+            };
 
             let app = if pwa_dir.exists() {
                 let index_file = pwa_dir.join("index.html");
                 Router::new()
                     .merge(api_routes)
+                    .nest_service("/plugins", ServeDir::new(&plugins_dir))
                     .fallback_service(ServeDir::new(&pwa_dir).fallback(ServeFile::new(index_file)))
                     .layer(cors)
             } else {
-                Router::new().merge(api_routes).layer(cors)
+                Router::new()
+                    .merge(api_routes)
+                    .nest_service("/plugins", ServeDir::new(&plugins_dir))
+                    .layer(cors)
             };
 
             let local_ip = get_local_ip();
@@ -374,19 +443,110 @@ pub fn start_remote_server(db: Database, launcher: Launcher) -> std::thread::Joi
 
             match tokio::net::TcpListener::bind(addr).await {
                 Ok(listener) => {
-                    if let Err(err) = axum::serve(listener, app).await {
+                    let shutdown_signal = async move {
+                        let _ = shutdown_rx.await;
+                        println!("🛑 Serveur distant KaïroOS arrêt gracieux...");
+                    };
+                    if let Err(err) = axum::serve(listener, app)
+                        .with_graceful_shutdown(shutdown_signal)
+                        .await
+                    {
                         eprintln!("❌ Erreur d'exécution du serveur distant: {}", err);
                     }
+                    println!("🛑 Serveur distant KaïroOS arrêté.");
                 }
                 Err(err) => {
                     eprintln!("❌ Impossible de lier le port {} pour le serveur distant: {}", port, err);
                 }
             }
         });
-    })
+    });
+
+    (handle, shutdown_tx)
 }
 
 // ==================== HANDLERS REST ====================
+
+/// Handler POST /api/console — exécute une commande shell whitelistée depuis l'admin distant
+async fn console_exec(
+    headers: HeaderMap,
+    Json(body): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    // Vérification PIN
+    let config = RemoteConfig::load();
+    if !verify_pin(&headers, &config.pin) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "success": false, "error": "PIN invalide" })),
+        );
+    }
+
+    let command = match body.get("command").and_then(|c| c.as_str()) {
+        Some(c) => c.to_string(),
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({ "success": false, "error": "Champ 'command' manquant" })),
+            );
+        }
+    };
+
+    // Whitelist de commandes autorisées (séparateur : premier mot)
+    let first_word = command.split_whitespace().next().unwrap_or("");
+    let allowed = [
+        "echo", "ping", "ipconfig", "ifconfig", "systeminfo",
+        "tasklist", "taskkill", "dir", "ls", "cat", "type",
+        "netstat", "whoami", "hostname", "ver", "uname",
+        "cargo", "npm", "git", "powershell",
+    ];
+    if !allowed.contains(&first_word) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "success": false,
+                "error": format!("Commande '{}' non autorisée", first_word)
+            })),
+        );
+    }
+
+    // Exécution
+    let output = if cfg!(target_os = "windows") {
+        std::process::Command::new("cmd")
+            .args(["/C", &command])
+            .output()
+    } else {
+        std::process::Command::new("sh")
+            .args(["-c", &command])
+            .output()
+    };
+
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+            let exit_code = out.status.code().unwrap_or(-1);
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "success": true,
+                    "data": {
+                        "stdout": stdout,
+                        "stderr": stderr,
+                        "exit_code": exit_code,
+                        "command": command
+                    }
+                })),
+            )
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "success": false,
+                "error": format!("Échec d'exécution: {}", e)
+            })),
+        ),
+    }
+}
 
 async fn get_status(State(state): State<RemoteServerState>) -> impl IntoResponse {
     let launch_status = state.launcher.get_status();
@@ -486,6 +646,36 @@ async fn toggle_game_favorite(
 
     match state.db.toggle_favorite(&id) {
         Ok(fav) => (StatusCode::OK, Json(ApiResponse { success: true, data: Some(fav), error: None })),
+        Err(err) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ApiResponse { success: false, data: None, error: Some(err.to_string()) }),
+        ),
+    }
+}
+
+async fn update_game_details(
+    AxumPath(id): AxumPath<String>,
+    headers: HeaderMap,
+    State(state): State<RemoteServerState>,
+    Json(game_updated): Json<Game>,
+) -> impl IntoResponse {
+    let config = RemoteConfig::load();
+    if !verify_pin(&headers, &config.pin) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse { success: false, data: None, error: Some("Code PIN non valide".into()) }),
+        );
+    }
+
+    if game_updated.id != id {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ApiResponse { success: false, data: None, error: Some("L'ID du jeu ne correspond pas".into()) }),
+        );
+    }
+
+    match state.db.update_game(&game_updated) {
+        Ok(_) => (StatusCode::OK, Json(ApiResponse { success: true, data: Some(game_updated), error: None })),
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse { success: false, data: None, error: Some(err.to_string()) }),
@@ -681,6 +871,34 @@ async fn save_settings(
     }
 }
 
+#[derive(Deserialize)]
+pub struct IntegrationsQuery {
+    pub host: Option<String>,
+}
+
+async fn get_integrations(
+    Query(query): Query<IntegrationsQuery>,
+) -> impl IntoResponse {
+    let host_id = if let Some(h) = query.host {
+        h
+    } else {
+        crate::plugins::PluginManager::discover_manifests()
+            .into_iter()
+            .find(|(m, _)| m.builtin_service.as_deref() == Some("remote_server"))
+            .map(|(m, _)| m.id)
+            .unwrap_or_default()
+    };
+    let contributions = crate::plugins::PluginManager::discover_contributions_for_host(&host_id);
+    (
+        StatusCode::OK,
+        Json(ApiResponse {
+            success: true,
+            data: Some(contributions),
+            error: None,
+        }),
+    )
+}
+
 async fn get_remote_cfg() -> impl IntoResponse {
     let config = RemoteConfig::load();
     Json(ApiResponse { success: true, data: Some(config), error: None })
@@ -773,23 +991,30 @@ async fn get_cover_image(Query(query): Query<CoverQuery>) -> impl IntoResponse {
 async fn login_auth(Json(req): Json<LoginRequest>) -> impl IntoResponse {
     let config = RemoteConfig::load();
     if req.pin.trim() == config.pin.trim() {
+        let cookie_val = format!("kairo_pin={}; Path=/; SameSite=Lax; Max-Age=86400", config.pin.trim());
+        let mut response_headers = HeaderMap::new();
+        if let Ok(hv) = HeaderValue::from_str(&cookie_val) {
+            response_headers.insert(header::SET_COOKIE, hv);
+        }
         (
             StatusCode::OK,
+            response_headers,
             Json(ApiResponse {
                 success: true,
                 data: Some("Authentification réussie"),
                 error: None,
             }),
-        )
+        ).into_response()
     } else {
         (
             StatusCode::UNAUTHORIZED,
-            Json(ApiResponse {
+            HeaderMap::new(),
+            Json(ApiResponse::<&'static str> {
                 success: false,
                 data: None,
                 error: Some("Code PIN non valide".into()),
             }),
-        )
+        ).into_response()
     }
 }
 
@@ -1078,3 +1303,93 @@ async fn remote_delete_theme(
     }
 }
 
+/// GET /api/plugins — liste tous les plugins installés et leur statut
+async fn remote_get_plugins() -> impl IntoResponse {
+    let manifests = crate::plugins::PluginManager::discover_manifests();
+    let config = crate::plugins::PluginManager::load_plugins_config();
+    let list: Vec<crate::plugins::PluginInfo> = manifests
+        .into_iter()
+        .map(|(manifest, path)| {
+            let rec = config.get(&manifest.id);
+            let enabled = rec.map(|r| r.enabled).unwrap_or(true);
+            crate::plugins::PluginInfo {
+                id: manifest.id.clone(),
+                name: manifest.name,
+                version: manifest.version,
+                author: manifest.author,
+                plugin_type: manifest.plugin_type,
+                description: manifest.description,
+                enabled,
+                running: enabled,
+                permissions: manifest.permissions,
+                commands: manifest.commands,
+                ui: manifest.ui,
+                has_settings: !manifest.settings_schema.is_empty(),
+                settings_section: manifest.settings_section.clone(),
+                host: manifest.host.clone(),
+                contributes: manifest.contributes.clone(),
+                path: path.to_string_lossy().to_string(),
+            }
+        })
+        .collect();
+    (StatusCode::OK, Json(ApiResponse { success: true, data: Some(list), error: None }))
+}
+
+/// POST /api/plugins/:id/toggle — active ou désactive un plugin
+async fn remote_toggle_plugin(
+    AxumPath(id): AxumPath<String>,
+    headers: HeaderMap,
+    Json(req): Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let config = RemoteConfig::load();
+    if !verify_pin(&headers, &config.pin) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(ApiResponse {
+                success: false,
+                data: None,
+                error: Some("Code PIN non valide".into()),
+            }),
+        );
+    }
+    let enabled = req.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+    let mut plugins_cfg = crate::plugins::PluginManager::load_plugins_config();
+    let entry = plugins_cfg.entry(id.clone()).or_insert_with(|| crate::plugins::PluginConfigRecord {
+        enabled: true,
+        settings: std::collections::HashMap::new(),
+    });
+    entry.enabled = enabled;
+    let _ = crate::plugins::PluginManager::save_plugins_config(&plugins_cfg);
+    (StatusCode::OK, Json(ApiResponse { success: true, data: Some(enabled), error: None }))
+}
+
+/// GET /api/plugins/:id/settings — retourne les réglages d'un plugin
+async fn remote_get_plugin_settings(
+    AxumPath(id): AxumPath<String>,
+) -> impl IntoResponse {
+    let config = crate::plugins::PluginManager::load_plugins_config();
+    if let Some(rec) = config.get(&id) {
+        (StatusCode::OK, Json(ApiResponse { success: true, data: Some(rec.settings.clone()), error: None }))
+    } else {
+        (StatusCode::NOT_FOUND, Json(ApiResponse::<std::collections::HashMap<String, serde_json::Value>> { success: false, data: None, error: Some(format!("Plugin '{}' introuvable", id)) }))
+    }
+}
+
+/// PUT /api/plugins/:id/settings — met à jour les réglages d'un plugin (merge)
+async fn remote_update_plugin_settings(
+    AxumPath(id): AxumPath<String>,
+    Json(new_settings): Json<std::collections::HashMap<String, serde_json::Value>>,
+) -> impl IntoResponse {
+    let mut config = crate::plugins::PluginManager::load_plugins_config();
+    let entry = config.entry(id.clone()).or_insert_with(|| crate::plugins::PluginConfigRecord {
+        enabled: true,
+        settings: std::collections::HashMap::new(),
+    });
+    for (k, v) in new_settings {
+        entry.settings.insert(k, v);
+    }
+    match crate::plugins::PluginManager::save_plugins_config(&config) {
+        Ok(_) => (StatusCode::OK, Json(ApiResponse { success: true, data: Some("OK"), error: None })),
+        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<&str> { success: false, data: None, error: Some(e) })),
+    }
+}

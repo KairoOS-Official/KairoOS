@@ -7,6 +7,29 @@ export interface PluginSettingField {
   secret?: boolean;
 }
 
+export interface PluginSettingsSection {
+  label?: string;
+  icon?: string;
+  order?: number;
+}
+
+export interface PluginHostConfig {
+  protocol: string;
+  discovers: string[];
+}
+
+export interface PluginContributesConfig {
+  to: string[];
+  points: Record<string, any>;
+}
+
+export interface PluginContributionPayload {
+  from: string;
+  to: string;
+  integration_point: string;
+  data: any;
+}
+
 export interface PluginManifest {
   id: string;
   name: string;
@@ -18,7 +41,11 @@ export interface PluginManifest {
   permissions: string[];
   entry?: string;
   ui?: string;
+  builtin_service?: string;
+  host?: PluginHostConfig;
+  contributes?: PluginContributesConfig;
   commands: string[];
+  settings_section?: PluginSettingsSection;
   settings_schema: Record<string, PluginSettingField>;
   sandbox?: boolean;
 }
@@ -35,7 +62,11 @@ export interface PluginInfo {
   permissions: string[];
   commands: string[];
   ui?: string;
+  builtin_service?: string;
+  host?: PluginHostConfig;
+  contributes?: PluginContributesConfig;
   has_settings: boolean;
+  settings_section?: PluginSettingsSection;
   path: string;
 }
 

@@ -10,8 +10,11 @@ pub use db::{Database, DbError};
 pub use launcher::{Launcher, LauncherError};
 pub use models::*;
 pub use paths::AppPaths;
-pub use plugins::{PluginConfigRecord, PluginDetail, PluginInfo, PluginManager, PluginManifest, PluginType};
-pub use remote::{start_remote_server, RemoteConfig};
+pub use plugins::{
+    PluginConfigRecord, PluginContributesConfig, PluginContributionPayload, PluginDetail,
+    PluginHostConfig, PluginInfo, PluginManager, PluginManifest, PluginType,
+};
+pub use remote::{start_remote_server, start_remote_server_with_shutdown, RemoteConfig};
 pub use scanner::RomScanner;
 
 #[cfg(test)]
@@ -317,6 +320,12 @@ mod tests {
             let cmd_res = launcher.build_command(&game, &snes_system, &retroarch_emu, None);
             assert!(cmd_res.is_ok(), "build_command failed: {:?}", cmd_res.err());
         }
+    }
+
+    #[test]
+    fn test_discover() {
+        let manifests = PluginManager::discover_manifests();
+        println!("FOUND MANIFESTS: {:?}", manifests.iter().map(|(m, p)| (&m.id, p)).collect::<Vec<_>>());
     }
 }
 

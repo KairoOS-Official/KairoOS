@@ -38,6 +38,7 @@ import {
 
 interface PluginsSectionProps {
   onNotification?: (msg: string, type?: 'info' | 'success' | 'warning' | 'error') => void;
+  onPluginsChange?: (plugins: PluginInfo[]) => void;
 }
 
 const PERMISSION_DESCRIPTIONS: Record<string, { label: string; desc: string; icon: React.ReactNode }> = {
@@ -78,7 +79,7 @@ const PERMISSION_DESCRIPTIONS: Record<string, { label: string; desc: string; ico
   },
 };
 
-export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification }) => {
+export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, onPluginsChange }) => {
   const [activeTab, setActiveTab] = useState<'installed' | 'official' | 'community'>('installed');
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -107,6 +108,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification }
       setLoading(true);
       const list = await getPlugins();
       setPlugins(list);
+      if (onPluginsChange) {
+        onPluginsChange(list);
+      }
     } catch (err: any) {
       console.error('[PluginsSection] Erreur chargement plugins:', err);
     } finally {
@@ -315,6 +319,21 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification }
 
         <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
           <button
+            onClick={fetchInstalledPlugins}
+            disabled={loading}
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderColor: 'var(--border-color)',
+              color: 'var(--text-primary)',
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold hover:border-[var(--accent-primary)]/40 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
+            title="Analyser et rafraîchir les plugins installés"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-500 ${loading ? 'animate-spin' : ''}`} />
+            <span>Rafraîchir</span>
+          </button>
+
+          <button
             onClick={handleInstallZipDialog}
             style={{
               backgroundColor: 'var(--bg-card)',
@@ -482,9 +501,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification }
 
                     {/* Feedback commande éventuel */}
                     {commandFeedback?.id === p.id && (
-                      <div className="p-2 rounded-xl bg-slate-900 text-white text-[10px] font-mono flex items-center gap-1.5">
-                        <Sparkles className="w-3 h-3 text-amber-400" />
-                        <span className="truncate">{commandFeedback.msg}</span>
+                      <div className="p-2.5 rounded-xl bg-slate-900 text-white text-[11px] font-mono flex items-start gap-1.5 break-words">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <span className="break-all">{commandFeedback.msg}</span>
                       </div>
                     )}
 
@@ -494,6 +513,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification }
                       className="pt-3 border-t flex items-center justify-between gap-2"
                     >
                       <div className="flex items-center gap-1.5 flex-wrap">
+
                         {p.has_settings && (
                           <button
                             onClick={() => handleOpenConfig(p.id)}
