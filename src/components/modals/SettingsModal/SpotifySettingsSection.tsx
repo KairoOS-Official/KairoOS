@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Radio,
   Clock,
@@ -243,6 +243,167 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     if (initialSettings.transition_speed !== undefined) setTransitionSpeed(initialSettings.transition_speed);
   }, [initialSettings]);
 
+  const broadcastSettingsUpdate = (payload: any) => {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('kairo_update_plugin_settings', {
+          detail: { id: 'kairo-spotify-screensaver', settings: payload },
+        })
+      );
+      window.postMessage(
+        {
+          type: 'kairo_update_settings',
+          settings: payload,
+        },
+        '*'
+      );
+      const iframes = document.querySelectorAll('iframe');
+      iframes.forEach((ifr) => {
+        try {
+          ifr.contentWindow?.postMessage(
+            {
+              type: 'kairo_update_settings',
+              settings: payload,
+            },
+            '*'
+          );
+        } catch (_) {}
+      });
+    } catch (_) {}
+  };
+
+  // Auto-sauvegarde persistante en direct dès modification
+  const isInitialMountRef = useRef(true);
+  const autoSaveTimeoutRef = useRef<any>(null);
+
+  const triggerAutoSave = useCallback(
+    (overrides: Record<string, any> = {}) => {
+      const payload = {
+        ...initialSettings,
+        enabled: pluginEnabled,
+        show_cover: showCover,
+        show_lyrics: showLyrics,
+        display_layout: displayLayout,
+        lyrics_font_size: lyricsFontSize,
+        lyrics_alignment: lyricsAlignment,
+        lyrics_highlight_color: lyricsHighlightColor,
+        lyrics_glow: lyricsGlow,
+        cover_size: coverSize,
+        vinyl_rotation: vinylRotation,
+        vinyl_speed: vinylSpeed,
+        blur_background: blurBackground,
+        blur_intensity: blurIntensity,
+        show_controls: showControls,
+        show_progress_bar: showProgressBar,
+        show_playlist_name: showPlaylistName,
+        show_album_name: showAlbumName,
+        show_device_badge: showDeviceBadge,
+        show_gamepad_hints: showGamepadHints,
+        transition_speed: transitionSpeed,
+        selected_device: (overrides.selected_device !== undefined ? overrides.selected_device : targetSpeaker).trim(),
+        target_speaker: (overrides.target_speaker !== undefined ? overrides.target_speaker : targetSpeaker).trim(),
+        idle_timeout_seconds: overrides.idle_timeout_seconds !== undefined ? overrides.idle_timeout_seconds : idleTimeout,
+        custom_devices: overrides.custom_devices !== undefined ? overrides.custom_devices : customDevices,
+        spotify_device_name: (overrides.spotify_device_name !== undefined ? overrides.spotify_device_name : deviceName).trim() || 'Borne Kaïro',
+        overlay_brightness: overrides.overlay_brightness !== undefined ? overrides.overlay_brightness : overlayBrightness,
+        spotify_access_token: (overrides.spotify_access_token !== undefined ? overrides.spotify_access_token : token).trim(),
+        spotify_client_id: (overrides.spotify_client_id !== undefined ? overrides.spotify_client_id : clientId).trim() || initialSettings.spotify_client_id || '744337ebc86048fc9d3ac3cdffd82aef',
+        spotify_refresh_token: (overrides.spotify_refresh_token !== undefined ? overrides.spotify_refresh_token : refreshToken).trim() || initialSettings.spotify_refresh_token || '',
+        spotify_token_expires_at: overrides.spotify_token_expires_at !== undefined ? overrides.spotify_token_expires_at : (tokenExpiresAt || initialSettings.spotify_token_expires_at || 0),
+        ...overrides,
+      };
+
+      onSave(payload);
+      broadcastSettingsUpdate(payload);
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2000);
+    },
+    [
+      initialSettings,
+      pluginEnabled,
+      showCover,
+      showLyrics,
+      displayLayout,
+      lyricsFontSize,
+      lyricsAlignment,
+      lyricsHighlightColor,
+      lyricsGlow,
+      coverSize,
+      vinylRotation,
+      vinylSpeed,
+      blurBackground,
+      blurIntensity,
+      showControls,
+      showProgressBar,
+      showPlaylistName,
+      showAlbumName,
+      showDeviceBadge,
+      showGamepadHints,
+      transitionSpeed,
+      targetSpeaker,
+      idleTimeout,
+      customDevices,
+      deviceName,
+      overlayBrightness,
+      token,
+      clientId,
+      refreshToken,
+      tokenExpiresAt,
+      onSave,
+    ]
+  );
+
+  // Détection automatique et temps réel de tout changement de paramètre
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
+    }
+    autoSaveTimeoutRef.current = setTimeout(() => {
+      triggerAutoSave();
+    }, 150);
+
+    return () => {
+      if (autoSaveTimeoutRef.current) {
+        clearTimeout(autoSaveTimeoutRef.current);
+      }
+    };
+  }, [
+    pluginEnabled,
+    showCover,
+    showLyrics,
+    displayLayout,
+    lyricsFontSize,
+    lyricsAlignment,
+    lyricsHighlightColor,
+    lyricsGlow,
+    coverSize,
+    vinylRotation,
+    vinylSpeed,
+    blurBackground,
+    blurIntensity,
+    showControls,
+    showProgressBar,
+    showPlaylistName,
+    showAlbumName,
+    showDeviceBadge,
+    showGamepadHints,
+    transitionSpeed,
+    targetSpeaker,
+    idleTimeout,
+    customDevices,
+    deviceName,
+    overlayBrightness,
+    token,
+    clientId,
+    refreshToken,
+    tokenExpiresAt,
+    triggerAutoSave,
+  ]);
+
   // Détection automatique d'erreur de jeton (Client ID vs Access Token)
   const isClientId = token.trim().length === 32 && !token.startsWith('BQ');
 
@@ -274,15 +435,26 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     setNewDeviceInput('');
     setAddDeviceNotice(`✓ Enceinte « ${trimmed} » ajoutée et sélectionnée !`);
     setTimeout(() => setAddDeviceNotice(null), 3500);
+    triggerAutoSave({
+      selected_device: trimmed,
+      target_speaker: trimmed,
+      custom_devices: updated,
+    });
   };
 
   const handleRemoveCustomDevice = (deviceNameToRemove: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const updated = customDevices.filter((d) => d !== deviceNameToRemove);
     setCustomDevices(updated);
+    const nextSpeaker = targetSpeaker === deviceNameToRemove ? (updated[0] || 'HP-Bureau') : targetSpeaker;
     if (targetSpeaker === deviceNameToRemove) {
-      setTargetSpeaker(updated[0] || 'HP-Bureau');
+      setTargetSpeaker(nextSpeaker);
     }
+    triggerAutoSave({
+      selected_device: nextSpeaker,
+      target_speaker: nextSpeaker,
+      custom_devices: updated,
+    });
   };
 
   // Gestion de la saisie du token avec extraction automatique
@@ -467,76 +639,9 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     }
   };
 
-  const broadcastSettingsUpdate = (payload: any) => {
-    try {
-      window.dispatchEvent(
-        new CustomEvent('kairo_update_plugin_settings', {
-          detail: { id: 'kairo-spotify-screensaver', settings: payload },
-        })
-      );
-      window.postMessage(
-        {
-          type: 'kairo_update_settings',
-          settings: payload,
-        },
-        '*'
-      );
-      const iframes = document.querySelectorAll('iframe');
-      iframes.forEach((ifr) => {
-        try {
-          ifr.contentWindow?.postMessage(
-            {
-              type: 'kairo_update_settings',
-              settings: payload,
-            },
-            '*'
-          );
-        } catch (_) {}
-      });
-    } catch (_) {}
-  };
-
-  // Enregistrer tous les réglages
+  // Enregistrer ou forcer la synchronisation manuelle
   const handleSave = async () => {
-    const payload = {
-      ...initialSettings,
-      enabled: pluginEnabled,
-      show_cover: showCover,
-      show_lyrics: showLyrics,
-      display_layout: displayLayout,
-      lyrics_font_size: lyricsFontSize,
-      lyrics_alignment: lyricsAlignment,
-      lyrics_highlight_color: lyricsHighlightColor,
-      lyrics_glow: lyricsGlow,
-      cover_size: coverSize,
-      vinyl_rotation: vinylRotation,
-      vinyl_speed: vinylSpeed,
-      blur_background: blurBackground,
-      blur_intensity: blurIntensity,
-      show_controls: showControls,
-      show_progress_bar: showProgressBar,
-      show_playlist_name: showPlaylistName,
-      show_album_name: showAlbumName,
-      show_device_badge: showDeviceBadge,
-      show_gamepad_hints: showGamepadHints,
-      transition_speed: transitionSpeed,
-      selected_device: targetSpeaker.trim(),
-      target_speaker: targetSpeaker.trim(),
-      idle_timeout_seconds: idleTimeout,
-      custom_devices: customDevices,
-      spotify_device_name: deviceName.trim() || 'Borne Kaïro',
-      overlay_brightness: overlayBrightness,
-      spotify_access_token: token.trim(),
-      spotify_client_id: clientId.trim() || initialSettings.spotify_client_id || '744337ebc86048fc9d3ac3cdffd82aef',
-      spotify_refresh_token: refreshToken.trim() || initialSettings.spotify_refresh_token || '',
-      spotify_token_expires_at: tokenExpiresAt || initialSettings.spotify_token_expires_at || 0,
-    };
-
-    await onSave(payload);
-    broadcastSettingsUpdate(payload);
-
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    triggerAutoSave();
   };
 
   // --- API TEST 1 : Utilisateur (/v1/me) ---
@@ -710,22 +815,10 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
             </span>
           </button>
 
-          {savedSuccess && (
-            <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 animate-fadeIn">
-              <Check className="w-4 h-4" />
-              <span>Enregistré !</span>
-            </span>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            style={{ backgroundColor: 'var(--accent-primary)' }}
-            className="px-5 py-2 rounded-xl text-white text-xs font-bold shadow-xs hover:opacity-90 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
-          >
-            <Save className="w-4 h-4" />
-            <span>{saving ? 'Enregistrement...' : 'Enregistrer'}</span>
-          </button>
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500 text-xs font-bold shadow-xs">
+            <Check className="w-4 h-4 text-emerald-400" />
+            <span>{savedSuccess ? 'Enregistré en direct !' : 'Auto-sauvegarde active'}</span>
+          </div>
         </div>
       </div>
 
@@ -1634,8 +1727,9 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
 
       {/* 5. BARRE D'ENREGISTREMENT INFÉRIEURE */}
       <div className="flex items-center justify-between pt-2">
-        <div style={{ color: 'var(--text-muted)' }} className="text-xs">
-          Les réglages sont automatiquement persistés et synchronisés avec KaïroOS.
+        <div className="flex items-center gap-2 text-xs font-bold text-emerald-600">
+          <Check className="w-4 h-4 text-emerald-500 shrink-0" />
+          <span>Auto-sauvegarde active : tous les réglages sont sauvegardés et appliqués en direct dès modification.</span>
         </div>
 
         <button
@@ -1643,10 +1737,10 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
           onClick={handleSave}
           disabled={saving}
           style={{ backgroundColor: 'var(--accent-primary)' }}
-          className="px-6 py-2.5 rounded-xl text-white text-xs font-black uppercase tracking-wider shadow-md hover:opacity-90 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
+          className="px-5 py-2 rounded-xl text-white text-xs font-black uppercase tracking-wider shadow-sm hover:opacity-90 active:scale-95 transition-all cursor-pointer disabled:opacity-50 flex items-center gap-2"
         >
           <Save className="w-4 h-4" />
-          <span>{saving ? 'Enregistrement...' : 'Enregistrer les Paramètres'}</span>
+          <span>{saving ? 'Synchronisation...' : 'Forcer Synchro'}</span>
         </button>
       </div>
     </div>

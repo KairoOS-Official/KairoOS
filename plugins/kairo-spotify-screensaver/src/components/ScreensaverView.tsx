@@ -256,14 +256,14 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
     if (lyricsHighlightColor === 'accent') {
       return {
         color: 'var(--kairo-accent-primary, #10b981)',
-        textShadow: '0 0 20px var(--kairo-accent-primary, rgba(16, 185, 129, 0.4))',
+        textShadow: lyricsGlow ? '0 0 20px var(--kairo-accent-primary, rgba(16, 185, 129, 0.4))' : 'none',
       };
     }
     return {
       color: lyricsHighlightColor,
-      textShadow: `0 0 20px ${lyricsHighlightColor}66`,
+      textShadow: lyricsGlow ? `0 0 20px ${lyricsHighlightColor}66` : 'none',
     };
-  }, [lyricsHighlightColor]);
+  }, [lyricsHighlightColor, lyricsGlow]);
 
   // Contrôles de lecture réutilisables
   const renderPlaybackControls = (centered = false) => {
@@ -333,7 +333,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col justify-between overflow-hidden select-none ${transitionClass}`}
+      className="fixed inset-0 z-50 flex flex-col justify-between overflow-hidden select-none"
       style={{
         backgroundColor: 'var(--kairo-bg-primary, #0b0f19)',
         color: 'var(--kairo-text-primary, #f8fafc)',
@@ -345,9 +345,10 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
           {layout === 'immersive' && blurBackground ? (
             // Fond immersif : Dégradé radial flou basé sur la couleur dominante
             <div
-              className="absolute inset-0 pointer-events-none filter blur-3xl scale-125 transition-all duration-1000"
+              className="absolute inset-0 pointer-events-none scale-125 transition-opacity duration-700"
               style={{
                 background: `radial-gradient(circle at 50% 40%, ${dominantColor.hex} 0%, rgba(11, 15, 25, 0.95) 75%)`,
+                filter: `blur(${blurIntensity * 1.5}px)`,
                 opacity: Math.max(0.15, Math.min(1.0, (overlayBrightness / 100) * 0.75)),
               }}
             />
@@ -355,9 +356,10 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
             // Fond standard karaoké flouté avec la jaquette
             track?.coverUrl && (
               <div
-                className="absolute inset-0 bg-cover bg-center scale-110 filter blur-3xl pointer-events-none transition-all duration-1000"
+                className="absolute inset-0 bg-cover bg-center scale-110 pointer-events-none transition-opacity duration-700"
                 style={{
                   backgroundImage: `url(${track.coverUrl})`,
+                  filter: blurBackground ? `blur(${blurIntensity}px)` : 'none',
                   opacity: Math.max(0.05, Math.min(1.0, (overlayBrightness / 100) * 0.45)),
                 }}
               />
@@ -506,12 +508,12 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
 
       {/* CAS 1 : LAYOUT "IMMERSIV" (Inspiré Spotify Now Playing / Ambiance immersive) */}
       {isTrackActive && track && layout === 'immersive' && (
-        <main className="relative z-10 flex-1 flex flex-col items-center justify-center p-6 md:p-10 overflow-hidden">
-          <div className="w-full max-w-5xl flex flex-col md:flex-row items-center justify-center gap-8 md:gap-14 my-auto">
+        <main className="relative z-10 flex-1 w-full h-full flex items-center justify-center p-6 md:p-10 overflow-hidden">
+          <div className="w-full max-w-5xl h-full max-h-[560px] flex flex-col md:flex-row items-center justify-center gap-8 md:gap-14 my-auto">
             {/* Centre/Gauche : Grande pochette avec ombre douce teintée par la couleur dominante */}
             {showCover && (
-              <div className="flex flex-col items-center shrink-0 space-y-5">
-                <div className="relative group">
+              <div className="flex flex-col items-center shrink-0 space-y-5 h-full justify-center">
+                <div className="relative group shrink-0">
                   {/* Effet vinyle optionnel */}
                   {vinylRotation && (
                     <div
@@ -521,6 +523,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                       style={{
                         backgroundColor: '#0a0d14',
                         borderColor: dominantColor.hex,
+                        animationDuration: vinylSpeed === 'fast' ? '10s' : vinylSpeed === 'slow' ? '32s' : '20s',
                       }}
                     >
                       <div className="w-20 h-20 rounded-full border-4 border-slate-800 bg-black flex items-center justify-center">
@@ -552,7 +555,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                 </div>
 
                 {/* Titre & Artiste en grand sous la pochette */}
-                <div className="text-center space-y-1 max-w-md">
+                <div className="text-center space-y-1 max-w-md shrink-0">
                   <h1
                     className="text-2xl md:text-3xl font-black tracking-tight line-clamp-1"
                     style={{ color: 'var(--kairo-text-primary, #ffffff)' }}
@@ -565,17 +568,19 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                   >
                     {track.artist}
                   </p>
-                  <p
-                    className="text-xs line-clamp-1"
-                    style={{ color: 'var(--kairo-text-muted, #64748b)' }}
-                  >
-                    {track.album}
-                  </p>
+                  {showAlbumName && track.album && (
+                    <p
+                      className="text-xs line-clamp-1"
+                      style={{ color: 'var(--kairo-text-muted, #64748b)' }}
+                    >
+                      {track.album}
+                    </p>
+                  )}
                 </div>
 
                 {/* Barre de progression & Temps */}
                 {showProgressBar && (
-                  <div className="w-full max-w-sm space-y-1.5 font-mono text-xs">
+                  <div className="w-full max-w-sm space-y-1.5 font-mono text-xs shrink-0">
                     <div
                       className="w-full h-2 rounded-full overflow-hidden"
                       style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)' }}
@@ -599,13 +604,13 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                 )}
 
                 {/* Contrôles de lecture fonctionnels */}
-                {renderPlaybackControls(true)}
+                <div className="shrink-0">{renderPlaybackControls(true)}</div>
               </div>
             )}
 
             {/* Droite : Paroles immersives grand format */}
             {showLyrics && (
-              <div className="flex-1 w-full max-w-2xl h-[380px] md:h-[520px] flex flex-col justify-center relative min-w-0">
+              <div className="flex-1 w-full h-full flex flex-col relative min-w-0 overflow-hidden">
                 {lyrics.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
                     <Volume2
@@ -628,7 +633,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                 ) : (
                   <div
                     ref={lyricsContainerRef}
-                    className={`h-full overflow-y-auto no-scrollbar space-y-7 py-32 px-4 md:px-8 w-full ${
+                    className={`flex-1 w-full overflow-y-auto no-scrollbar space-y-7 py-44 px-4 md:px-8 ${
                       lyricsAlignment === 'center'
                         ? 'text-center'
                         : lyricsAlignment === 'right'
@@ -644,7 +649,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         <p
                           key={idx}
                           style={isActive ? activeLyricStyle : undefined}
-                          className={`font-bold leading-relaxed cursor-default transition-colors duration-300 break-words whitespace-normal ${lyricsFontClass} ${
+                          className={`font-bold leading-relaxed cursor-default transition-colors duration-200 break-words whitespace-normal ${lyricsFontClass} ${
                             isActive
                               ? 'opacity-100 underline decoration-[3px] underline-offset-8'
                               : isPast
@@ -666,12 +671,12 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
 
       {/* CAS 2 : LAYOUT "KARAOKE" (Standard épuré 2 colonnes avec focus défilement paroles) */}
       {isTrackActive && track && layout === 'karaoke' && (
-        <main className="relative z-10 flex-1 flex items-center justify-center p-6 md:p-12 overflow-hidden">
-          <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <main className="relative z-10 flex-1 w-full h-full flex items-center justify-center p-6 md:p-10 overflow-hidden">
+          <div className="w-full max-w-7xl h-full max-h-[620px] flex flex-row items-stretch gap-8 md:gap-12 overflow-hidden">
             {/* Colonne Gauche : Pochette vinyle tournante */}
             {showCover && (
-              <div className="lg:col-span-5 flex flex-col items-center justify-center text-center space-y-5">
-                <div className="relative group">
+              <div className="w-[340px] md:w-[400px] shrink-0 flex flex-col items-center justify-center text-center space-y-4 h-full my-auto">
+                <div className="relative group shrink-0">
                   {vinylRotation && (
                     <div
                       className={`absolute -right-6 -bottom-6 ${coverSizeClasses} rounded-full border-4 shadow-2xl flex items-center justify-center ${
@@ -680,6 +685,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                       style={{
                         backgroundColor: '#0f172a',
                         borderColor: '#1e293b',
+                        animationDuration: vinylSpeed === 'fast' ? '10s' : vinylSpeed === 'slow' ? '32s' : '20s',
                       }}
                     >
                       <div className="w-20 h-20 rounded-full border-4 border-slate-700 bg-black flex items-center justify-center">
@@ -709,7 +715,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                   </div>
                 </div>
 
-                <div className="space-y-1.5 max-w-sm">
+                <div className="space-y-1.5 max-w-sm shrink-0">
                   <h1
                     className="text-xl md:text-2xl font-black tracking-tight line-clamp-1"
                     style={{ color: 'var(--kairo-text-primary, #ffffff)' }}
@@ -722,16 +728,18 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                   >
                     {track.artist}
                   </p>
-                  <p
-                    className="text-xs line-clamp-1"
-                    style={{ color: 'var(--kairo-text-muted, #64748b)' }}
-                  >
-                    {track.album}
-                  </p>
+                  {showAlbumName && track.album && (
+                    <p
+                      className="text-xs line-clamp-1"
+                      style={{ color: 'var(--kairo-text-muted, #64748b)' }}
+                    >
+                      {track.album}
+                    </p>
+                  )}
                 </div>
 
                 {showProgressBar && (
-                  <div className="w-full max-w-xs space-y-1.5 font-mono text-xs">
+                  <div className="w-full max-w-xs space-y-1.5 font-mono text-xs shrink-0">
                     <div
                       className="w-full h-1.5 rounded-full overflow-hidden"
                       style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)' }}
@@ -755,17 +763,13 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                 )}
 
                 {/* Contrôles Karaoké */}
-                {renderPlaybackControls(true)}
+                <div className="shrink-0">{renderPlaybackControls(true)}</div>
               </div>
             )}
 
             {/* Colonne Droite : Paroles Karaoké Défilantes */}
             {showLyrics && (
-              <div
-                className={`${
-                  showCover ? 'lg:col-span-7' : 'lg:col-span-12'
-                } h-[420px] md:h-[580px] flex flex-col justify-center relative min-w-0 w-full`}
-              >
+              <div className="flex-1 min-w-0 h-full flex flex-col relative overflow-hidden">
                 {lyrics.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3">
                     <Volume2
@@ -788,7 +792,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                 ) : (
                   <div
                     ref={lyricsContainerRef}
-                    className={`h-full overflow-y-auto no-scrollbar space-y-7 py-36 px-4 md:px-8 w-full ${
+                    className={`flex-1 w-full overflow-y-auto no-scrollbar space-y-7 py-48 px-6 md:px-12 ${
                       lyricsAlignment === 'center'
                         ? 'text-center'
                         : lyricsAlignment === 'right'
@@ -804,7 +808,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         <p
                           key={idx}
                           style={isActive ? activeLyricStyle : undefined}
-                          className={`font-bold leading-relaxed cursor-default transition-colors duration-300 break-words whitespace-normal ${lyricsFontClass} ${
+                          className={`font-bold leading-relaxed cursor-default transition-colors duration-200 break-words whitespace-normal ${lyricsFontClass} ${
                             isActive
                               ? 'opacity-100 underline decoration-[3px] underline-offset-8'
                               : isPast
@@ -833,18 +837,22 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
           color: 'var(--kairo-text-secondary, #94a1b2)',
         }}
       >
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: 'var(--kairo-accent-primary, #10b981)' }}>
-            <Gamepad2 className="w-4 h-4" />
-            <span>Manette :</span>
+        {showGamepadHints ? (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color: 'var(--kairo-accent-primary, #10b981)' }}>
+              <Gamepad2 className="w-4 h-4" />
+              <span>Manette :</span>
+            </div>
+            <span className="hidden sm:inline">
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">A</kbd> Play/Pause •{' '}
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">Y</kbd> Favori •{' '}
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">◄ / ►</kbd> Piste •{' '}
+              <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">B</kbd> Fermer
+            </span>
           </div>
-          <span className="hidden sm:inline">
-            <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">A</kbd> Play/Pause •{' '}
-            <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">Y</kbd> Favori •{' '}
-            <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">◄ / ►</kbd> Piste •{' '}
-            <kbd className="px-1.5 py-0.5 rounded bg-white/10 font-bold">B</kbd> Fermer
-          </span>
-        </div>
+        ) : (
+          <div />
+        )}
 
         <div
           className="font-bold flex items-center gap-1.5"
