@@ -26,7 +26,21 @@ import {
   Type,
   Palette,
   Disc,
+  Mic,
+  Sliders,
 } from 'lucide-react';
+
+const parseBool = (v: any, fallback = false): boolean => {
+  if (v === undefined || v === null) return fallback;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+  }
+  return Boolean(v);
+};
 import {
   openExternalUrl,
   generateCodeVerifier,
@@ -146,40 +160,52 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     initialSettings.lyrics_highlight_color || 'accent'
   );
   const [lyricsGlow, setLyricsGlow] = useState<boolean>(
-    initialSettings.lyrics_glow !== undefined ? Boolean(initialSettings.lyrics_glow) : true
+    parseBool(initialSettings.lyrics_glow, true)
   );
-  const [coverSize, setCoverSize] = useState<'small' | 'medium' | 'large'>(
-    initialSettings.cover_size || 'medium'
+  const [lyricsUnderline, setLyricsUnderline] = useState<boolean>(
+    parseBool(initialSettings.lyrics_underline, false)
+  );
+  const [lyricsActiveScale, setLyricsActiveScale] = useState<boolean>(
+    parseBool(initialSettings.lyrics_active_scale, true)
+  );
+  const [lyricsLinesBefore, setLyricsLinesBefore] = useState<number>(
+    initialSettings.lyrics_lines_before !== undefined ? Number(initialSettings.lyrics_lines_before) : -1
+  );
+  const [lyricsLinesAfter, setLyricsLinesAfter] = useState<number>(
+    initialSettings.lyrics_lines_after !== undefined ? Number(initialSettings.lyrics_lines_after) : -1
+  );
+  const [coverSize, setCoverSize] = useState<'small' | 'medium' | 'large' | 'xlarge'>(
+    initialSettings.cover_size || initialSettings.coverSize || 'medium'
   );
   const [vinylRotation, setVinylRotation] = useState<boolean>(
-    initialSettings.vinyl_rotation !== undefined ? Boolean(initialSettings.vinyl_rotation) : true
+    parseBool(initialSettings.vinyl_rotation, true)
   );
   const [vinylSpeed, setVinylSpeed] = useState<'slow' | 'normal' | 'fast'>(
     initialSettings.vinyl_speed || 'normal'
   );
   const [blurBackground, setBlurBackground] = useState<boolean>(
-    initialSettings.blur_background !== undefined ? Boolean(initialSettings.blur_background) : true
+    parseBool(initialSettings.blur_background, true)
   );
   const [blurIntensity, setBlurIntensity] = useState<number>(
     initialSettings.blur_intensity !== undefined ? initialSettings.blur_intensity : 30
   );
   const [showControls, setShowControls] = useState<boolean>(
-    initialSettings.show_controls !== undefined ? Boolean(initialSettings.show_controls) : true
+    parseBool(initialSettings.show_controls, true)
   );
   const [showProgressBar, setShowProgressBar] = useState<boolean>(
-    initialSettings.show_progress_bar !== undefined ? Boolean(initialSettings.show_progress_bar) : true
+    parseBool(initialSettings.show_progress_bar, true)
   );
   const [showPlaylistName, setShowPlaylistName] = useState<boolean>(
-    initialSettings.show_playlist_name !== undefined ? Boolean(initialSettings.show_playlist_name) : true
+    parseBool(initialSettings.show_playlist_name, true)
   );
   const [showAlbumName, setShowAlbumName] = useState<boolean>(
-    initialSettings.show_album_name !== undefined ? Boolean(initialSettings.show_album_name) : true
+    parseBool(initialSettings.show_album_name, true)
   );
   const [showDeviceBadge, setShowDeviceBadge] = useState<boolean>(
-    initialSettings.show_device_badge !== undefined ? Boolean(initialSettings.show_device_badge) : true
+    parseBool(initialSettings.show_device_badge, true)
   );
   const [showGamepadHints, setShowGamepadHints] = useState<boolean>(
-    initialSettings.show_gamepad_hints !== undefined ? Boolean(initialSettings.show_gamepad_hints) : true
+    parseBool(initialSettings.show_gamepad_hints, true)
   );
   const [transitionSpeed, setTransitionSpeed] = useState<'instant' | 'fast' | 'smooth'>(
     initialSettings.transition_speed || 'smooth'
@@ -187,13 +213,13 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
 
   // Paramètres Communs (Affichage)
   const [pluginEnabled, setPluginEnabled] = useState<boolean>(
-    initialSettings.enabled !== undefined ? Boolean(initialSettings.enabled) : true
+    parseBool(initialSettings.enabled, true)
   );
   const [showCover, setShowCover] = useState<boolean>(
-    initialSettings.show_cover !== undefined ? Boolean(initialSettings.show_cover) : true
+    parseBool(initialSettings.show_cover, true)
   );
   const [showLyrics, setShowLyrics] = useState<boolean>(
-    initialSettings.show_lyrics !== undefined ? Boolean(initialSettings.show_lyrics) : true
+    parseBool(initialSettings.show_lyrics, true)
   );
   const [overlayBrightness, setOverlayBrightness] = useState<number>(
     initialSettings.overlay_brightness !== undefined ? initialSettings.overlay_brightness : 80
@@ -219,26 +245,32 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     else if (initialSettings.target_speaker !== undefined) setTargetSpeaker(initialSettings.target_speaker);
     if (initialSettings.idle_timeout_seconds !== undefined) setIdleTimeout(initialSettings.idle_timeout_seconds);
     if (Array.isArray(initialSettings.custom_devices)) setCustomDevices(initialSettings.custom_devices);
-    if (initialSettings.enabled !== undefined) setPluginEnabled(Boolean(initialSettings.enabled));
-    if (initialSettings.show_cover !== undefined) setShowCover(Boolean(initialSettings.show_cover));
-    if (initialSettings.show_lyrics !== undefined) setShowLyrics(Boolean(initialSettings.show_lyrics));
+    if (initialSettings.enabled !== undefined) setPluginEnabled(parseBool(initialSettings.enabled, true));
+    if (initialSettings.show_cover !== undefined) setShowCover(parseBool(initialSettings.show_cover, true));
+    if (initialSettings.show_lyrics !== undefined) setShowLyrics(parseBool(initialSettings.show_lyrics, true));
     if (initialSettings.overlay_brightness !== undefined) setOverlayBrightness(initialSettings.overlay_brightness);
     if (initialSettings.display_layout !== undefined) setDisplayLayout(initialSettings.display_layout);
     if (initialSettings.lyrics_font_size !== undefined) setLyricsFontSize(initialSettings.lyrics_font_size);
     if (initialSettings.lyrics_alignment !== undefined) setLyricsAlignment(initialSettings.lyrics_alignment);
     if (initialSettings.lyrics_highlight_color !== undefined) setLyricsHighlightColor(initialSettings.lyrics_highlight_color);
-    if (initialSettings.lyrics_glow !== undefined) setLyricsGlow(Boolean(initialSettings.lyrics_glow));
-    if (initialSettings.cover_size !== undefined) setCoverSize(initialSettings.cover_size);
-    if (initialSettings.vinyl_rotation !== undefined) setVinylRotation(Boolean(initialSettings.vinyl_rotation));
+    if (initialSettings.lyrics_glow !== undefined) setLyricsGlow(parseBool(initialSettings.lyrics_glow, true));
+    if (initialSettings.lyrics_underline !== undefined) setLyricsUnderline(parseBool(initialSettings.lyrics_underline, false));
+    if (initialSettings.lyrics_active_scale !== undefined) setLyricsActiveScale(parseBool(initialSettings.lyrics_active_scale, true));
+    if (initialSettings.lyrics_lines_before !== undefined) setLyricsLinesBefore(Number(initialSettings.lyrics_lines_before));
+    if (initialSettings.lyrics_lines_after !== undefined) setLyricsLinesAfter(Number(initialSettings.lyrics_lines_after));
+    if (initialSettings.cover_size !== undefined || initialSettings.coverSize !== undefined) {
+      setCoverSize(initialSettings.cover_size || initialSettings.coverSize || 'medium');
+    }
+    if (initialSettings.vinyl_rotation !== undefined) setVinylRotation(parseBool(initialSettings.vinyl_rotation, true));
     if (initialSettings.vinyl_speed !== undefined) setVinylSpeed(initialSettings.vinyl_speed);
-    if (initialSettings.blur_background !== undefined) setBlurBackground(Boolean(initialSettings.blur_background));
+    if (initialSettings.blur_background !== undefined) setBlurBackground(parseBool(initialSettings.blur_background, true));
     if (initialSettings.blur_intensity !== undefined) setBlurIntensity(initialSettings.blur_intensity);
-    if (initialSettings.show_controls !== undefined) setShowControls(Boolean(initialSettings.show_controls));
-    if (initialSettings.show_progress_bar !== undefined) setShowProgressBar(Boolean(initialSettings.show_progress_bar));
-    if (initialSettings.show_playlist_name !== undefined) setShowPlaylistName(Boolean(initialSettings.show_playlist_name));
-    if (initialSettings.show_album_name !== undefined) setShowAlbumName(Boolean(initialSettings.show_album_name));
-    if (initialSettings.show_device_badge !== undefined) setShowDeviceBadge(Boolean(initialSettings.show_device_badge));
-    if (initialSettings.show_gamepad_hints !== undefined) setShowGamepadHints(Boolean(initialSettings.show_gamepad_hints));
+    if (initialSettings.show_controls !== undefined) setShowControls(parseBool(initialSettings.show_controls, true));
+    if (initialSettings.show_progress_bar !== undefined) setShowProgressBar(parseBool(initialSettings.show_progress_bar, true));
+    if (initialSettings.show_playlist_name !== undefined) setShowPlaylistName(parseBool(initialSettings.show_playlist_name, true));
+    if (initialSettings.show_album_name !== undefined) setShowAlbumName(parseBool(initialSettings.show_album_name, true));
+    if (initialSettings.show_device_badge !== undefined) setShowDeviceBadge(parseBool(initialSettings.show_device_badge, true));
+    if (initialSettings.show_gamepad_hints !== undefined) setShowGamepadHints(parseBool(initialSettings.show_gamepad_hints, true));
     if (initialSettings.transition_speed !== undefined) setTransitionSpeed(initialSettings.transition_speed);
   }, [initialSettings]);
 
@@ -271,9 +303,142 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
     } catch (_) {}
   };
 
-  // Auto-sauvegarde persistante en direct dès modification
-  const isInitialMountRef = useRef(true);
-  const autoSaveTimeoutRef = useRef<any>(null);
+  const saveTimerRef = useRef<any>(null);
+
+  const applyChange = useCallback(
+    (key: string, val: any) => {
+      switch (key) {
+        case 'display_layout': setDisplayLayout(val); break;
+        case 'lyrics_font_size': setLyricsFontSize(val); break;
+        case 'lyrics_alignment': setLyricsAlignment(val); break;
+        case 'lyrics_highlight_color': setLyricsHighlightColor(val); break;
+        case 'lyrics_glow': setLyricsGlow(val); break;
+        case 'lyrics_underline': setLyricsUnderline(val); break;
+        case 'lyrics_active_scale': setLyricsActiveScale(val); break;
+        case 'lyrics_lines_before': setLyricsLinesBefore(val); break;
+        case 'lyrics_lines_after': setLyricsLinesAfter(val); break;
+        case 'cover_size': setCoverSize(val); break;
+        case 'vinyl_rotation': setVinylRotation(val); break;
+        case 'vinyl_speed': setVinylSpeed(val); break;
+        case 'blur_background': setBlurBackground(val); break;
+        case 'blur_intensity': setBlurIntensity(val); break;
+        case 'show_controls': setShowControls(val); break;
+        case 'show_progress_bar': setShowProgressBar(val); break;
+        case 'show_playlist_name': setShowPlaylistName(val); break;
+        case 'show_album_name': setShowAlbumName(val); break;
+        case 'show_device_badge': setShowDeviceBadge(val); break;
+        case 'show_gamepad_hints': setShowGamepadHints(val); break;
+        case 'transition_speed': setTransitionSpeed(val); break;
+        case 'enabled': setPluginEnabled(val); break;
+        case 'show_cover': setShowCover(val); break;
+        case 'show_lyrics': setShowLyrics(val); break;
+        case 'overlay_brightness': setOverlayBrightness(val); break;
+      }
+
+      const currentCover = key === 'cover_size' || key === 'coverSize' ? val : coverSize;
+      const currentUnderline = key === 'lyrics_underline' || key === 'lyricsUnderline' ? val : lyricsUnderline;
+      const currentActiveScale = key === 'lyrics_active_scale' || key === 'lyricsActiveScale' ? val : lyricsActiveScale;
+      const currentLinesBefore = key === 'lyrics_lines_before' || key === 'lyricsLinesBefore' ? val : lyricsLinesBefore;
+      const currentLinesAfter = key === 'lyrics_lines_after' || key === 'lyricsLinesAfter' ? val : lyricsLinesAfter;
+
+      const fullPayload = {
+        ...initialSettings,
+        enabled: key === 'enabled' ? val : pluginEnabled,
+        show_cover: key === 'show_cover' ? val : showCover,
+        show_lyrics: key === 'show_lyrics' ? val : showLyrics,
+        display_layout: key === 'display_layout' ? val : displayLayout,
+        lyrics_font_size: key === 'lyrics_font_size' ? val : lyricsFontSize,
+        lyrics_alignment: key === 'lyrics_alignment' ? val : lyricsAlignment,
+        lyrics_highlight_color: key === 'lyrics_highlight_color' ? val : lyricsHighlightColor,
+        lyrics_glow: key === 'lyrics_glow' ? val : lyricsGlow,
+        lyrics_underline: currentUnderline,
+        lyricsUnderline: currentUnderline,
+        lyrics_active_scale: currentActiveScale,
+        lyricsActiveScale: currentActiveScale,
+        lyrics_lines_before: currentLinesBefore,
+        lyricsLinesBefore: currentLinesBefore,
+        lyrics_lines_after: currentLinesAfter,
+        lyricsLinesAfter: currentLinesAfter,
+        cover_size: currentCover,
+        coverSize: currentCover,
+        vinyl_rotation: key === 'vinyl_rotation' ? val : vinylRotation,
+        vinyl_speed: key === 'vinyl_speed' ? val : vinylSpeed,
+        blur_background: key === 'blur_background' ? val : blurBackground,
+        blur_intensity: key === 'blur_intensity' ? val : blurIntensity,
+        show_controls: key === 'show_controls' ? val : showControls,
+        show_progress_bar: key === 'show_progress_bar' ? val : showProgressBar,
+        show_playlist_name: key === 'show_playlist_name' ? val : showPlaylistName,
+        show_album_name: key === 'show_album_name' ? val : showAlbumName,
+        show_device_badge: key === 'show_device_badge' ? val : showDeviceBadge,
+        show_gamepad_hints: key === 'show_gamepad_hints' ? val : showGamepadHints,
+        transition_speed: key === 'transition_speed' ? val : transitionSpeed,
+        overlay_brightness: key === 'overlay_brightness' ? val : overlayBrightness,
+        selected_device: targetSpeaker.trim(),
+        target_speaker: targetSpeaker.trim(),
+        idle_timeout_seconds: idleTimeout,
+        custom_devices: customDevices,
+        spotify_device_name: deviceName.trim() || 'Borne Kaïro',
+        spotify_access_token: token.trim(),
+        spotify_client_id: clientId.trim() || initialSettings.spotify_client_id || '744337ebc86048fc9d3ac3cdffd82aef',
+        spotify_refresh_token: refreshToken.trim() || initialSettings.spotify_refresh_token || '',
+        spotify_token_expires_at: tokenExpiresAt,
+      };
+
+      // Diffusion immédiate vers le plugin screensaver en mémoire
+      broadcastSettingsUpdate(fullPayload);
+
+      // Enregistrement immédiat pour les clics (checkbox, selects) ou debouncé pour sliders
+      setSavedSuccess(true);
+      if (key === 'blur_intensity' || key === 'overlay_brightness') {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+          onSave(fullPayload);
+          setTimeout(() => setSavedSuccess(false), 2000);
+        }, 200);
+      } else {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        onSave(fullPayload);
+        setTimeout(() => setSavedSuccess(false), 2000);
+      }
+    },
+    [
+      initialSettings,
+      pluginEnabled,
+      showCover,
+      showLyrics,
+      displayLayout,
+      lyricsFontSize,
+      lyricsAlignment,
+      lyricsHighlightColor,
+      lyricsGlow,
+      lyricsUnderline,
+      lyricsActiveScale,
+      lyricsLinesBefore,
+      lyricsLinesAfter,
+      coverSize,
+      vinylRotation,
+      vinylSpeed,
+      blurBackground,
+      blurIntensity,
+      showControls,
+      showProgressBar,
+      showPlaylistName,
+      showAlbumName,
+      showDeviceBadge,
+      showGamepadHints,
+      transitionSpeed,
+      overlayBrightness,
+      targetSpeaker,
+      idleTimeout,
+      customDevices,
+      deviceName,
+      token,
+      clientId,
+      refreshToken,
+      tokenExpiresAt,
+      onSave,
+    ]
+  );
 
   const triggerAutoSave = useCallback(
     (overrides: Record<string, any> = {}) => {
@@ -287,7 +452,12 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
         lyrics_alignment: lyricsAlignment,
         lyrics_highlight_color: lyricsHighlightColor,
         lyrics_glow: lyricsGlow,
+        lyrics_underline: lyricsUnderline,
+        lyrics_active_scale: lyricsActiveScale,
+        lyrics_lines_before: lyricsLinesBefore,
+        lyrics_lines_after: lyricsLinesAfter,
         cover_size: coverSize,
+        coverSize: coverSize,
         vinyl_rotation: vinylRotation,
         vinyl_speed: vinylSpeed,
         blur_background: blurBackground,
@@ -327,6 +497,10 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
       lyricsAlignment,
       lyricsHighlightColor,
       lyricsGlow,
+      lyricsUnderline,
+      lyricsActiveScale,
+      lyricsLinesBefore,
+      lyricsLinesAfter,
       coverSize,
       vinylRotation,
       vinylSpeed,
@@ -351,57 +525,6 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
       onSave,
     ]
   );
-
-  // Détection automatique et temps réel de tout changement de paramètre
-  useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      return;
-    }
-    if (autoSaveTimeoutRef.current) {
-      clearTimeout(autoSaveTimeoutRef.current);
-    }
-    autoSaveTimeoutRef.current = setTimeout(() => {
-      triggerAutoSave();
-    }, 150);
-
-    return () => {
-      if (autoSaveTimeoutRef.current) {
-        clearTimeout(autoSaveTimeoutRef.current);
-      }
-    };
-  }, [
-    pluginEnabled,
-    showCover,
-    showLyrics,
-    displayLayout,
-    lyricsFontSize,
-    lyricsAlignment,
-    lyricsHighlightColor,
-    lyricsGlow,
-    coverSize,
-    vinylRotation,
-    vinylSpeed,
-    blurBackground,
-    blurIntensity,
-    showControls,
-    showProgressBar,
-    showPlaylistName,
-    showAlbumName,
-    showDeviceBadge,
-    showGamepadHints,
-    transitionSpeed,
-    targetSpeaker,
-    idleTimeout,
-    customDevices,
-    deviceName,
-    overlayBrightness,
-    token,
-    clientId,
-    refreshToken,
-    tokenExpiresAt,
-    triggerAutoSave,
-  ]);
 
   // Détection automatique d'erreur de jeton (Client ID vs Access Token)
   const isClientId = token.trim().length === 32 && !token.startsWith('BQ');
@@ -1071,7 +1194,7 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
           </label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div
-              onClick={() => setDisplayLayout('karaoke')}
+              onClick={() => applyChange('display_layout', 'karaoke')}
               style={{
                 backgroundColor:
                   displayLayout === 'karaoke' ? 'rgba(16, 185, 129, 0.1)' : 'var(--bg-secondary)',
@@ -1097,7 +1220,7 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
             </div>
 
             <div
-              onClick={() => setDisplayLayout('immersive')}
+              onClick={() => applyChange('display_layout', 'immersive')}
               style={{
                 backgroundColor:
                   displayLayout === 'immersive' ? 'rgba(168, 85, 247, 0.1)' : 'var(--bg-secondary)',
@@ -1124,267 +1247,499 @@ export const SpotifySettingsSection: React.FC<SpotifySettingsSectionProps> = ({
           </div>
         </div>
 
-        {/* 4.2 OPTIONS TYPOGRAPHIQUES & PAROLES */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-          {/* Taille des paroles */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3.5 rounded-2xl border space-y-1.5"
-          >
-            <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
-              <Type className="w-3.5 h-3.5 text-sky-400" />
-              <span>Taille des paroles :</span>
-            </label>
-            <select
-              value={lyricsFontSize}
-              onChange={(e: any) => setLyricsFontSize(e.target.value)}
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                borderColor: 'var(--border-color)',
-                color: 'var(--text-primary)',
-              }}
-              className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
-            >
-              <option value="small">Petite</option>
-              <option value="medium">Moyenne</option>
-              <option value="large">Grande (Défaut)</option>
-              <option value="xlarge">Très Grande</option>
-            </select>
+        {/* 4.2 CATÉGORIE : PAROLES & KARAOKÉ */}
+        <div className="p-4 rounded-2xl border space-y-4" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+          <div className="flex items-center gap-2 border-b border-white/10 pb-2.5">
+            <Mic className="w-4 h-4 text-sky-400" />
+            <h5 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
+              Catégorie 1 : Paroles & Karaoké
+            </h5>
           </div>
 
-          {/* Alignement des paroles */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3.5 rounded-2xl border space-y-1.5"
-          >
-            <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
-              <AlignLeft className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Alignement paroles :</span>
-            </label>
-            <select
-              value={lyricsAlignment}
-              onChange={(e: any) => setLyricsAlignment(e.target.value)}
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                borderColor: 'var(--border-color)',
-                color: 'var(--text-primary)',
-              }}
-              className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
-            >
-              <option value="left">Gauche (Karaoké standard)</option>
-              <option value="center">Centré (Poétique)</option>
-              <option value="right">Droite</option>
-            </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {/* Taille des paroles */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <Type className="w-3.5 h-3.5 text-sky-400" />
+                <span>Taille des paroles :</span>
+              </label>
+              <select
+                value={lyricsFontSize}
+                onChange={(e) => applyChange('lyrics_font_size', e.target.value)}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+              >
+                <option value="small">Petite</option>
+                <option value="medium">Moyenne</option>
+                <option value="large">Grande (Défaut)</option>
+                <option value="xlarge">Très Grande</option>
+              </select>
+            </div>
+
+            {/* Alignement des paroles */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <AlignLeft className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Alignement paroles :</span>
+              </label>
+              <select
+                value={lyricsAlignment}
+                onChange={(e) => applyChange('lyrics_alignment', e.target.value)}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+              >
+                <option value="left">Gauche (Karaoké standard)</option>
+                <option value="center">Centré (Poétique)</option>
+                <option value="right">Droite</option>
+              </select>
+            </div>
+
+            {/* Couleur de surbrillance */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <Palette className="w-3.5 h-3.5 text-amber-400" />
+                <span>Couleur de surbrillance :</span>
+              </label>
+              <select
+                value={lyricsHighlightColor}
+                onChange={(e) => applyChange('lyrics_highlight_color', e.target.value)}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+              >
+                <option value="accent">Thème Actif KaïroOS</option>
+                <option value="#10b981">Vert Émeraude (#10b981)</option>
+                <option value="#f59e0b">Or / Ambre (#f59e0b)</option>
+                <option value="#06b6d4">Cyan Électrique (#06b6d4)</option>
+                <option value="#a855f7">Violet Cyber (#a855f7)</option>
+                <option value="#ffffff">Blanc Pur (#ffffff)</option>
+              </select>
+            </div>
+
+            {/* Lignes affichées avant */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-sky-400" />
+                <span>Lignes affichées avant :</span>
+              </label>
+              <select
+                value={lyricsLinesBefore}
+                onChange={(e) => applyChange('lyrics_lines_before', parseInt(e.target.value, 10))}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+              >
+                <option value="-1">Toutes (Défilement complet)</option>
+                <option value="0">0 ligne avant (aucune)</option>
+                <option value="1">1 ligne avant</option>
+                <option value="2">2 lignes avant</option>
+                <option value="3">3 lignes avant</option>
+                <option value="4">4 lignes avant</option>
+                <option value="5">5 lignes avant</option>
+              </select>
+            </div>
+
+            {/* Lignes affichées après */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                <span>Lignes affichées après :</span>
+              </label>
+              <select
+                value={lyricsLinesAfter}
+                onChange={(e) => applyChange('lyrics_lines_after', parseInt(e.target.value, 10))}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+              >
+                <option value="-1">Toutes (Défilement complet)</option>
+                <option value="0">0 ligne après (aucune)</option>
+                <option value="1">1 ligne après</option>
+                <option value="2">2 lignes après</option>
+                <option value="3">3 lignes après</option>
+                <option value="4">4 lignes après</option>
+                <option value="5">5 lignes après</option>
+              </select>
+            </div>
           </div>
 
-          {/* Couleur de surbrillance */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3.5 rounded-2xl border space-y-1.5"
-          >
-            <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
-              <Palette className="w-3.5 h-3.5 text-amber-400" />
-              <span>Couleur de surbrillance :</span>
-            </label>
-            <select
-              value={lyricsHighlightColor}
-              onChange={(e: any) => setLyricsHighlightColor(e.target.value)}
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                borderColor: 'var(--border-color)',
-                color: 'var(--text-primary)',
-              }}
-              className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+          {/* Toggles spécifiques aux Paroles */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
             >
-              <option value="accent">Thème Actif KaïroOS</option>
-              <option value="green">Vert Spotify (#10b981)</option>
-              <option value="gold">Or / Ambre (#f59e0b)</option>
-              <option value="cyan">Cyan Électrique (#06b6d4)</option>
-              <option value="white">Blanc Pur (#ffffff)</option>
-            </select>
+              <div>
+                <div style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                  Souligner parole chantée
+                </div>
+                <div style={{ color: 'var(--text-muted)' }} className="text-[10px]">
+                  Trait sous la ligne active
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={lyricsUnderline}
+                onChange={(e) => applyChange('lyrics_underline', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <div>
+                <div style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                  Zoom parole chantée
+                </div>
+                <div style={{ color: 'var(--text-muted)' }} className="text-[10px]">
+                  Grossissement dynamique
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={lyricsActiveScale}
+                onChange={(e) => applyChange('lyrics_active_scale', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <div>
+                <div style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                  Lueur Paroles (Glow)
+                </div>
+                <div style={{ color: 'var(--text-muted)' }} className="text-[10px]">
+                  Halo lumineux néon
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={lyricsGlow}
+                onChange={(e) => applyChange('lyrics_glow', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
           </div>
         </div>
 
-        {/* 4.3 OPTIONS DE POCHETTE & VINYLE */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Taille pochette */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3.5 rounded-2xl border space-y-1.5"
-          >
-            <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
-              <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
-              <span>Taille jaquette :</span>
-            </label>
-            <select
-              value={coverSize}
-              onChange={(e: any) => setCoverSize(e.target.value)}
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                borderColor: 'var(--border-color)',
-                color: 'var(--text-primary)',
-              }}
-              className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
-            >
-              <option value="small">Compacte</option>
-              <option value="medium">Moyenne (Défaut)</option>
-              <option value="large">Grande</option>
-            </select>
+        {/* 4.3 CATÉGORIE : POCHETTE, VINYLE & ARRIÈRE-PLAN */}
+        <div className="p-4 rounded-2xl border space-y-4" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+          <div className="flex items-center gap-2 border-b border-white/10 pb-2.5">
+            <Disc className="w-4 h-4 text-purple-400" />
+            <h5 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
+              Catégorie 2 : Pochette, Vinyle & Arrière-plan
+            </h5>
           </div>
 
-          {/* Rotation vinyle */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3.5 rounded-2xl border flex items-center justify-between"
-          >
-            <div className="flex items-center gap-2">
-              <Disc className="w-4 h-4 text-emerald-400" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Taille pochette */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 text-purple-400" />
+                <span>Taille jaquette :</span>
+              </label>
+              <select
+                value={coverSize}
+                onChange={(e) => applyChange('cover_size', e.target.value)}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+              >
+                <option value="small">Petite / Compacte</option>
+                <option value="medium">Moyenne (Défaut)</option>
+                <option value="large">Grande</option>
+                <option value="xlarge">Très Grande</option>
+              </select>
+            </div>
+
+            {/* Vitesse vinyle */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                <span>Vitesse vinyle :</span>
+              </label>
+              <select
+                value={vinylSpeed}
+                onChange={(e) => applyChange('vinyl_speed', e.target.value)}
+                disabled={!vinylRotation}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer disabled:opacity-40"
+              >
+                <option value="slow">Lente (12s / tour)</option>
+                <option value="normal">Standard (8s / tour)</option>
+                <option value="fast">Rapide (4s / tour)</option>
+              </select>
+            </div>
+
+            {/* Vitesse transition */}
+            <div className="space-y-1.5">
+              <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Vitesse transition :</span>
+              </label>
+              <select
+                value={transitionSpeed}
+                onChange={(e) => applyChange('transition_speed', e.target.value)}
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'var(--border-color)',
+                  color: 'var(--text-primary)',
+                }}
+                className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer"
+              >
+                <option value="instant">Instantanée (sans animation)</option>
+                <option value="fast">Rapide (150ms)</option>
+                <option value="smooth">Fluide (500ms - Défaut)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Toggles Pochette & Fond */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
               <div>
                 <div style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
                   Rotation Vinyle 33T
                 </div>
                 <div style={{ color: 'var(--text-muted)' }} className="text-[10px]">
-                  Effet disque tournant
+                  Disque en rotation
                 </div>
               </div>
+              <input
+                type="checkbox"
+                checked={vinylRotation}
+                onChange={(e) => applyChange('vinyl_rotation', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
             </div>
-            <input
-              type="checkbox"
-              checked={vinylRotation}
-              onChange={(e) => setVinylRotation(e.target.checked)}
-              className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
-            />
-          </div>
 
-          {/* Vitesse vinyle */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3.5 rounded-2xl border space-y-1.5"
-          >
-            <label style={{ color: 'var(--text-primary)' }} className="text-xs font-bold flex items-center gap-1.5">
-              <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
-              <span>Vitesse vinyle :</span>
-            </label>
-            <select
-              value={vinylSpeed}
-              onChange={(e: any) => setVinylSpeed(e.target.value)}
-              disabled={!vinylRotation}
-              style={{
-                backgroundColor: 'var(--bg-card)',
-                borderColor: 'var(--border-color)',
-                color: 'var(--text-primary)',
-              }}
-              className="w-full p-2 rounded-xl text-xs font-bold border outline-none cursor-pointer disabled:opacity-40"
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
             >
-              <option value="slow">Lente (12s / tour)</option>
-              <option value="normal">Standard (8s / tour)</option>
-              <option value="fast">Rapide (4s / tour)</option>
-            </select>
+              <div>
+                <div style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                  Arrière-plan flou
+                </div>
+                <div style={{ color: 'var(--text-muted)' }} className="text-[10px]">
+                  Flouter la jaquette en fond
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={blurBackground}
+                onChange={(e) => applyChange('blur_background', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <div>
+                <div style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                  Nom de l'album
+                </div>
+                <div style={{ color: 'var(--text-muted)' }} className="text-[10px]">
+                  Afficher sous le titre
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={showAlbumName}
+                onChange={(e) => applyChange('show_album_name', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {/* Jauges Flou & Luminosité */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+            <div className={!blurBackground ? 'opacity-40 pointer-events-none' : ''}>
+              <div className="flex items-center justify-between text-xs font-bold mb-1">
+                <span style={{ color: 'var(--text-primary)' }}>Intensité du flou d'arrière-plan :</span>
+                <span className="font-mono text-purple-400">{blurIntensity}px</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="60"
+                step="2"
+                disabled={!blurBackground}
+                value={blurIntensity}
+                onChange={(e) => applyChange('blur_intensity', parseInt(e.target.value, 10))}
+                className="w-full accent-purple-500 cursor-pointer"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between text-xs font-bold mb-1">
+                <span className="flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                  <Sun className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Luminosité de l'overlay :</span>
+                </span>
+                <span className="font-mono text-emerald-400">{overlayBrightness}%</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="100"
+                step="5"
+                value={overlayBrightness}
+                onChange={(e) => applyChange('overlay_brightness', parseInt(e.target.value, 10))}
+                className="w-full accent-emerald-500 cursor-pointer"
+              />
+            </div>
           </div>
         </div>
 
-        {/* 4.4 TOGGLES COMPLÉMENTAIRES */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Lueur sur paroles */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3 rounded-2xl border flex items-center justify-between"
-          >
-            <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
-              Lueur Paroles (Glow)
-            </span>
-            <input
-              type="checkbox"
-              checked={lyricsGlow}
-              onChange={(e) => setLyricsGlow(e.target.checked)}
-              className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
-            />
+        {/* 4.4 CATÉGORIE : ÉLÉMENTS D'AFFICHAGE & INTERFACE */}
+        <div className="p-4 rounded-2xl border space-y-3" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}>
+          <div className="flex items-center gap-2 border-b border-white/10 pb-2.5">
+            <Sliders className="w-4 h-4 text-emerald-400" />
+            <h5 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
+              Catégorie 3 : Éléments d'Affichage & Interface
+            </h5>
           </div>
 
-          {/* Arrière-plan flou */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3 rounded-2xl border flex items-center justify-between"
-          >
-            <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
-              Arrière-plan flou
-            </span>
-            <input
-              type="checkbox"
-              checked={blurBackground}
-              onChange={(e) => setBlurBackground(e.target.checked)}
-              className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
-            />
-          </div>
-
-          {/* Contrôles de lecture */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3 rounded-2xl border flex items-center justify-between"
-          >
-            <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
-              Boutons de Lecture
-            </span>
-            <input
-              type="checkbox"
-              checked={showControls}
-              onChange={(e) => setShowControls(e.target.checked)}
-              className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
-            />
-          </div>
-
-          {/* Barre de progression */}
-          <div
-            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-            className="p-3 rounded-2xl border flex items-center justify-between"
-          >
-            <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
-              Barre de temps
-            </span>
-            <input
-              type="checkbox"
-              checked={showProgressBar}
-              onChange={(e) => setShowProgressBar(e.target.checked)}
-              className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
-            />
-          </div>
-        </div>
-
-        {/* 4.5 LUMINOSITÉ OVERLAY & INTENSITÉ FLOU */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-          <div>
-            <div className="flex items-center justify-between text-xs font-bold mb-1">
-              <span className="flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
-                <Sun className="w-3.5 h-3.5 text-amber-400" />
-                <span>Luminosité de l'overlay :</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                Afficher la pochette
               </span>
-              <span className="font-mono text-emerald-400">{overlayBrightness}%</span>
+              <input
+                type="checkbox"
+                checked={showCover}
+                onChange={(e) => applyChange('show_cover', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
             </div>
-            <input
-              type="range"
-              min="10"
-              max="100"
-              step="5"
-              value={overlayBrightness}
-              onChange={(e) => setOverlayBrightness(parseInt(e.target.value, 10))}
-              className="w-full accent-emerald-500 cursor-pointer"
-            />
-          </div>
 
-          <div>
-            <div className="flex items-center justify-between text-xs font-bold mb-1">
-              <span style={{ color: 'var(--text-primary)' }}>Intensité du flou d'arrière-plan :</span>
-              <span className="font-mono text-purple-400">{blurIntensity}px</span>
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                Afficher les paroles
+              </span>
+              <input
+                type="checkbox"
+                checked={showLyrics}
+                onChange={(e) => applyChange('show_lyrics', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
             </div>
-            <input
-              type="range"
-              min="5"
-              max="60"
-              step="5"
-              value={blurIntensity}
-              onChange={(e) => setBlurIntensity(parseInt(e.target.value, 10))}
-              className="w-full accent-purple-500 cursor-pointer"
-            />
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                Boutons de Lecture
+              </span>
+              <input
+                type="checkbox"
+                checked={showControls}
+                onChange={(e) => applyChange('show_controls', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                Barre de progression
+              </span>
+              <input
+                type="checkbox"
+                checked={showProgressBar}
+                onChange={(e) => applyChange('show_progress_bar', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                Nom de la playlist
+              </span>
+              <input
+                type="checkbox"
+                checked={showPlaylistName}
+                onChange={(e) => applyChange('show_playlist_name', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                Badge Spotify Connect
+              </span>
+              <input
+                type="checkbox"
+                checked={showDeviceBadge}
+                onChange={(e) => applyChange('show_device_badge', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
+
+            <div
+              style={{ backgroundColor: 'var(--bg-card)', borderColor: 'var(--border-color)' }}
+              className="p-3 rounded-2xl border flex items-center justify-between"
+            >
+              <span style={{ color: 'var(--text-primary)' }} className="text-xs font-bold">
+                Raccourcis manette
+              </span>
+              <input
+                type="checkbox"
+                checked={showGamepadHints}
+                onChange={(e) => applyChange('show_gamepad_hints', e.target.checked)}
+                className="w-4 h-4 rounded text-emerald-500 cursor-pointer"
+              />
+            </div>
           </div>
         </div>
       </div>

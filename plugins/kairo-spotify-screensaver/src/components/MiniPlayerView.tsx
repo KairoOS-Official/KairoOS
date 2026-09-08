@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { SpotifyTrack } from '../services/spotify';
 import { LyricLine } from '../services/lyrics';
 import { useKairoTheme } from '../services/theme';
@@ -27,6 +27,19 @@ export const MiniPlayerView: React.FC<MiniPlayerViewProps> = ({
 }) => {
   const { isDark } = useKairoTheme();
   const isPlaying = Boolean(track?.isPlaying);
+  const [isExiting, setIsExiting] = useState(false);
+
+  const handleAction = (action: 'maximize' | 'close') => {
+    if (action === 'maximize') {
+      onMaximize();
+    } else {
+      if (isExiting) return;
+      setIsExiting(true);
+      setTimeout(() => {
+        onClose();
+      }, 200);
+    }
+  };
 
   // Recherche de la ligne de parole actuelle
   const activeLyric = lyrics.reduce<LyricLine | null>((acc, line) => {
@@ -42,7 +55,7 @@ export const MiniPlayerView: React.FC<MiniPlayerViewProps> = ({
 
   return (
     <div
-      className="w-full h-full backdrop-blur-2xl border rounded-2xl shadow-2xl p-3 flex items-center justify-between gap-3 overflow-hidden select-none animate-fadeIn group"
+      className="w-full h-full backdrop-blur-2xl border rounded-2xl shadow-2xl p-3 flex items-center justify-between gap-3 overflow-hidden select-none group"
       style={{
         backgroundColor: isDark ? 'rgba(11, 15, 25, 0.95)' : 'rgba(248, 250, 252, 0.95)',
         borderColor: 'var(--kairo-border-color, rgba(255, 255, 255, 0.15))',
@@ -178,14 +191,14 @@ export const MiniPlayerView: React.FC<MiniPlayerViewProps> = ({
           </button>
         )}
         <button
-          onClick={onMaximize}
+          onClick={() => handleAction('maximize')}
           className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 transition-all cursor-pointer"
           title="Agrandir en plein écran"
         >
           <Maximize2 className="w-3.5 h-3.5" />
         </button>
         <button
-          onClick={onClose}
+          onClick={() => handleAction('close')}
           className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 transition-all cursor-pointer"
           style={{ color: 'var(--kairo-text-muted, #94a1b2)' }}
           title="Masquer le mini-lecteur"

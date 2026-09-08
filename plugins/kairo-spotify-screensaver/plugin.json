@@ -82,7 +82,7 @@
     },
     "cover_size": {
       "type": "select",
-      "options": ["small", "medium", "large"],
+      "options": ["small", "medium", "large", "xlarge"],
       "default": "medium",
       "label": "Taille de la jaquette"
     },
@@ -152,6 +152,26 @@
       "type": "boolean",
       "default": true,
       "label": "Effet de lueur néon sur la ligne active"
+    },
+    "lyrics_underline": {
+      "type": "boolean",
+      "default": false,
+      "label": "Souligner la parole chantée active"
+    },
+    "lyrics_active_scale": {
+      "type": "boolean",
+      "default": true,
+      "label": "Grossissement dynamique (zoom) de la ligne active"
+    },
+    "lyrics_lines_before": {
+      "type": "number",
+      "default": -1,
+      "label": "Nombre de lignes affichées avant (-1 pour tout)"
+    },
+    "lyrics_lines_after": {
+      "type": "number",
+      "default": -1,
+      "label": "Nombre de lignes affichées après (-1 pour tout)"
     },
     "spotify_device_name": {
       "type": "string",

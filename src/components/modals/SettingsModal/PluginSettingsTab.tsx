@@ -357,7 +357,6 @@ const PluginSettingsContent: React.FC<PluginSettingsTabProps> = ({
               setSavedSuccess(true);
               setTimeout(() => setSavedSuccess(false), 2000);
               if (onNotification) onNotification('Paramètres Spotify enregistrés avec succès', 'success');
-              await fetchDetail();
             } catch (err: any) {
               if (onNotification) onNotification(`Erreur sauvegarde: ${err}`, 'error');
             } finally {

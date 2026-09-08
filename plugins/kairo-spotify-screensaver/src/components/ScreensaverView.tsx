@@ -28,7 +28,7 @@ export interface ScreensaverDisplaySettings {
   displayLayout?: 'karaoke' | 'immersive';
   lyricsFontSize?: 'small' | 'medium' | 'large' | 'xlarge';
   lyricsAlignment?: 'left' | 'center' | 'right';
-  coverSize?: 'small' | 'medium' | 'large';
+  coverSize?: 'small' | 'medium' | 'large' | 'xlarge';
   vinylRotation?: boolean;
   vinylSpeed?: 'slow' | 'normal' | 'fast';
   blurBackground?: boolean;
@@ -42,6 +42,10 @@ export interface ScreensaverDisplaySettings {
   transitionSpeed?: 'instant' | 'fast' | 'smooth';
   lyricsHighlightColor?: string;
   lyricsGlow?: boolean;
+  lyricsUnderline?: boolean;
+  lyricsActiveScale?: boolean;
+  lyricsLinesBefore?: number;
+  lyricsLinesAfter?: number;
 }
 
 interface ScreensaverViewProps {
@@ -60,7 +64,20 @@ interface ScreensaverViewProps {
   onToggleShuffle?: () => void;
   isFavorite?: boolean;
   isShuffle?: boolean;
+  isManual?: boolean;
 }
+
+const parseBool = (v: any, fallback = false): boolean => {
+  if (v === undefined || v === null) return fallback;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+  }
+  return Boolean(v);
+};
 
 export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
   track,
@@ -69,7 +86,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
   onExit,
   onMinimize,
   isBornePlaying = false,
-  isDemo,
+  isDemo = false,
   displaySettings,
   onTogglePlay,
   onNext,
@@ -78,31 +95,113 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
   onToggleShuffle,
   isFavorite = false,
   isShuffle = false,
+  isManual = false,
 }) => {
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
   const { isDark } = useKairoTheme();
+  const handleExitWithAnim = (action: 'minimize' | 'exit') => {
+    if (action === 'minimize' && onMinimize) {
+      onMinimize();
+    } else {
+      onExit();
+    }
+  };
 
-  // Options graphiques
+  // CAS VEILLE AUTOMATIQUE :
+  // Si on est en mode veille automatique (pas manuel), N'IMPORTE QUEL bouton ou mouvement rapetisse la musique !
+  useEffect(() => {
+    if (isManual) return;
+
+    const handleWakeUp = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      handleExitWithAnim('minimize');
+    };
+
+    window.addEventListener('keydown', handleWakeUp, { capture: true });
+    window.addEventListener('mousedown', handleWakeUp, { capture: true });
+    window.addEventListener('pointerdown', handleWakeUp, { capture: true });
+    window.addEventListener('mousemove', handleWakeUp, { capture: true });
+    window.addEventListener('wheel', handleWakeUp, { capture: true });
+    window.addEventListener('touchstart', handleWakeUp, { capture: true });
+
+    let animFrame: number;
+    const pollWakeUpGamepad = () => {
+      const gamepads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
+      for (const gp of gamepads) {
+        if (!gp) continue;
+        const buttonPressed = gp.buttons?.some((b) => b.pressed);
+        const stickMoved = gp.axes?.some((a) => Math.abs(a) > 0.2);
+        if (buttonPressed || stickMoved) {
+          handleExitWithAnim('minimize');
+          return;
+        }
+      }
+      animFrame = requestAnimationFrame(pollWakeUpGamepad);
+    };
+    animFrame = requestAnimationFrame(pollWakeUpGamepad);
+
+    return () => {
+      window.removeEventListener('keydown', handleWakeUp, { capture: true });
+      window.removeEventListener('mousedown', handleWakeUp, { capture: true });
+      window.removeEventListener('pointerdown', handleWakeUp, { capture: true });
+      window.removeEventListener('mousemove', handleWakeUp, { capture: true });
+      window.removeEventListener('wheel', handleWakeUp, { capture: true });
+      window.removeEventListener('touchstart', handleWakeUp, { capture: true });
+      cancelAnimationFrame(animFrame);
+    };
+  }, [isManual, onMinimize, onExit]);
+
+  // CAS PLEIN ÉCRAN MANUEL :
+  // Sortie possible uniquement avec la touche Échap (Escape)
+  useEffect(() => {
+    if (!isManual) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.code === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        handleExitWithAnim('minimize');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, [isManual, onMinimize, onExit]);
+
+  // Options graphiques avec parsing booléen strict (évite le piège Boolean("false") === true)
   const layout = displaySettings?.displayLayout || 'karaoke';
-  const showCover = displaySettings?.showCover ?? true;
-  const showLyrics = displaySettings?.showLyrics ?? true;
+  const showCover = parseBool(displaySettings?.showCover, true);
+  const showLyrics = parseBool(displaySettings?.showLyrics, true);
   const overlayBrightness = displaySettings?.overlayBrightness ?? 80;
-  const lyricsFontSize = displaySettings?.lyricsFontSize || 'large';
-  const lyricsAlignment = displaySettings?.lyricsAlignment || 'left';
-  const coverSize = displaySettings?.coverSize || 'medium';
-  const vinylRotation = displaySettings?.vinylRotation ?? true;
-  const vinylSpeed = displaySettings?.vinylSpeed || 'normal';
-  const blurBackground = displaySettings?.blurBackground ?? true;
-  const blurIntensity = displaySettings?.blurIntensity ?? 30;
-  const showControls = displaySettings?.showControls ?? true;
-  const showProgressBar = displaySettings?.showProgressBar ?? true;
-  const showPlaylistName = displaySettings?.showPlaylistName ?? true;
-  const showAlbumName = displaySettings?.showAlbumName ?? true;
-  const showDeviceBadge = displaySettings?.showDeviceBadge ?? true;
-  const showGamepadHints = displaySettings?.showGamepadHints ?? true;
-  const transitionSpeed = displaySettings?.transitionSpeed || 'smooth';
-  const lyricsHighlightColor = displaySettings?.lyricsHighlightColor || 'accent';
-  const lyricsGlow = displaySettings?.lyricsGlow ?? true;
+  const lyricsFontSize = displaySettings?.lyricsFontSize || (displaySettings as any)?.lyrics_font_size || 'large';
+  const lyricsAlignment = displaySettings?.lyricsAlignment || (displaySettings as any)?.lyrics_alignment || 'left';
+  const coverSize = (displaySettings?.coverSize as any) || (displaySettings as any)?.cover_size || 'medium';
+  const vinylRotation = parseBool(displaySettings?.vinylRotation ?? (displaySettings as any)?.vinyl_rotation, true);
+  const vinylSpeed = displaySettings?.vinylSpeed || (displaySettings as any)?.vinyl_speed || 'normal';
+  const blurBackground = parseBool(displaySettings?.blurBackground ?? (displaySettings as any)?.blur_background, true);
+  const blurIntensity = displaySettings?.blurIntensity ?? (displaySettings as any)?.blur_intensity ?? 30;
+  const showControls = parseBool(displaySettings?.showControls ?? (displaySettings as any)?.show_controls, true);
+  const showProgressBar = parseBool(displaySettings?.showProgressBar ?? (displaySettings as any)?.show_progress_bar, true);
+  const showPlaylistName = parseBool(displaySettings?.showPlaylistName ?? (displaySettings as any)?.show_playlist_name, true);
+  const showAlbumName = parseBool(displaySettings?.showAlbumName ?? (displaySettings as any)?.show_album_name, true);
+  const showDeviceBadge = parseBool(displaySettings?.showDeviceBadge ?? (displaySettings as any)?.show_device_badge, true);
+  const showGamepadHints = parseBool(displaySettings?.showGamepadHints ?? (displaySettings as any)?.show_gamepad_hints, true);
+  const transitionSpeed = displaySettings?.transitionSpeed || (displaySettings as any)?.transition_speed || 'smooth';
+  const lyricsHighlightColor = displaySettings?.lyricsHighlightColor || (displaySettings as any)?.lyrics_highlight_color || 'accent';
+  const lyricsGlow = parseBool(displaySettings?.lyricsGlow ?? (displaySettings as any)?.lyrics_glow, true);
+  const lyricsUnderline = parseBool(
+    displaySettings?.lyricsUnderline !== undefined
+      ? displaySettings.lyricsUnderline
+      : (displaySettings as any)?.lyrics_underline,
+    false
+  );
+  const lyricsActiveScale = parseBool(displaySettings?.lyricsActiveScale ?? (displaySettings as any)?.lyrics_active_scale, true);
+  const lyricsLinesBefore = displaySettings?.lyricsLinesBefore !== undefined
+    ? displaySettings.lyricsLinesBefore
+    : ((displaySettings as any)?.lyrics_lines_before !== undefined ? Number((displaySettings as any).lyrics_lines_before) : -1);
+  const lyricsLinesAfter = displaySettings?.lyricsLinesAfter !== undefined
+    ? displaySettings.lyricsLinesAfter
+    : ((displaySettings as any)?.lyrics_lines_after !== undefined ? Number((displaySettings as any).lyrics_lines_after) : -1);
 
   // Toast feedback pour les ajouts aux favoris et actions
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -122,50 +221,64 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
   });
 
   useEffect(() => {
-    if (track?.coverUrl) {
-      extractDominantColor(track.coverUrl).then((c) => {
-        setDominantColor(c);
-      });
-    }
+    if (!track?.coverUrl) return;
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.src = track.coverUrl;
+    img.onload = () => {
+      try {
+        const colorThief = new (window as any).ColorThief();
+        const rgb = colorThief.getColor(img);
+        if (rgb && rgb.length === 3) {
+          const hex = `#${((1 << 24) + (rgb[0] << 16) + (rgb[1] << 8) + rgb[2]).toString(16).slice(1)}`;
+          const brightness = (rgb[0] * 299 + rgb[1] * 587 + rgb[2] * 114) / 1000;
+          setDominantColor({ hex, rgb: [rgb[0], rgb[1], rgb[2]], isDark: brightness < 128 });
+        }
+      } catch (_) {}
+    };
   }, [track?.coverUrl]);
 
   const isTrackActive = Boolean(track && track.title && track.isPlaying);
 
   // Navigation manette intégrée (A = Play/Pause, Y = Favori, D-Pad = Précédent/Suivant, B = Quitter)
+  // Active UNIQUEMENT en mode plein écran manuel
   useEffect(() => {
+    if (!isManual) return;
+
     let animFrame: number;
     let lastButtonPress = 0;
 
     const pollGamepad = () => {
       const gamepads = typeof navigator.getGamepads === 'function' ? navigator.getGamepads() : [];
-      const gp = gamepads[0] || gamepads[1];
-      if (gp) {
+      const gp = gamepads[0] || gamepads[1] || gamepads[2] || gamepads[3];
+
+      if (gp && gp.connected) {
         const now = Date.now();
-        if (now - lastButtonPress > 300) {
-          // A (Bouton 0) -> Play/Pause
-          if (gp.buttons[0]?.pressed && onTogglePlay) {
+        if (now - lastButtonPress > 280) {
+          // A (Bouton 0) -> Play / Pause
+          if (gp.buttons[0]?.pressed) {
             lastButtonPress = now;
-            onTogglePlay();
+            if (onTogglePlay) onTogglePlay();
           }
           // Y (Bouton 3) -> Favori
           else if (gp.buttons[3]?.pressed) {
             lastButtonPress = now;
             handleFavoriteClick();
           }
-          // D-Pad Gauche (Bouton 14 ou axe < -0.6) -> Précédent
-          else if ((gp.buttons[14]?.pressed || gp.axes[0] < -0.6) && onPrevious) {
+          // D-Pad Gauche (Bouton 14) -> Précédent
+          else if (gp.buttons[14]?.pressed) {
             lastButtonPress = now;
-            onPrevious();
+            onPrevious?.();
           }
-          // D-Pad Droite (Bouton 15 ou axe > 0.6) -> Suivant
-          else if ((gp.buttons[15]?.pressed || gp.axes[0] > 0.6) && onNext) {
+          // D-Pad Droite (Bouton 15) -> Suivant
+          else if (gp.buttons[15]?.pressed) {
             lastButtonPress = now;
-            onNext();
+            onNext?.();
           }
-          // B (Bouton 1) -> Quitter
+          // B (Bouton 1) -> Réduire en mini-lecteur / Quitter
           else if (gp.buttons[1]?.pressed) {
             lastButtonPress = now;
-            onExit();
+            handleExitWithAnim('minimize');
           }
         }
       }
@@ -174,7 +287,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
 
     animFrame = requestAnimationFrame(pollGamepad);
     return () => cancelAnimationFrame(animFrame);
-  }, [onTogglePlay, isFavorite, onPrevious, onNext, onExit]);
+  }, [isManual, onTogglePlay, isFavorite, onPrevious, onNext, onExit]);
 
   // Index de la ligne active
   const activeLyricIndex = lyrics.reduce((acc, line, idx) => {
@@ -184,11 +297,27 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
     return acc;
   }, -1);
 
+  // Filtrage selon les options 'lyricsLinesBefore' et 'lyricsLinesAfter'
+  const displayedLyrics = useMemo(() => {
+    if (lyrics.length === 0) return [];
+
+    const currentIdx = activeLyricIndex >= 0 ? activeLyricIndex : 0;
+    const minIdx = lyricsLinesBefore >= 0 ? Math.max(0, currentIdx - lyricsLinesBefore) : 0;
+    const maxIdx = lyricsLinesAfter >= 0 ? Math.min(lyrics.length - 1, currentIdx + lyricsLinesAfter) : lyrics.length - 1;
+
+    return lyrics
+      .map((l, idx) => ({ ...l, originalIndex: idx }))
+      .filter((item) => item.originalIndex >= minIdx && item.originalIndex <= maxIdx);
+  }, [lyrics, activeLyricIndex, lyricsLinesBefore, lyricsLinesAfter]);
+
+  // Index de l'élément dans displayedLyrics pour le défilement centré
+  const displayedActiveIdx = displayedLyrics.findIndex((item) => item.originalIndex === activeLyricIndex);
+
   // Défilement automatique centré STRICTEMENT confiné au conteneur des paroles
   useEffect(() => {
-    if (activeLyricIndex >= 0 && lyricsContainerRef.current) {
+    if (displayedActiveIdx >= 0 && lyricsContainerRef.current) {
       const container = lyricsContainerRef.current;
-      const activeElem = container.children[activeLyricIndex] as HTMLElement;
+      const activeElem = container.children[displayedActiveIdx] as HTMLElement;
       if (activeElem) {
         const targetScroll = activeElem.offsetTop - container.clientHeight / 2 + activeElem.clientHeight / 2;
         container.scrollTo({
@@ -197,7 +326,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
         });
       }
     }
-  }, [activeLyricIndex, transitionSpeed]);
+  }, [displayedActiveIdx, transitionSpeed]);
 
   const formatTime = (ms: number) => {
     const totalSeconds = Math.floor(ms / 1000);
@@ -210,16 +339,49 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
     ? Math.min(100, Math.max(0, (currentProgressMs / track.durationMs) * 100))
     : 0;
 
-  // Calcul des classes de taille de pochette
+  // Dimensions précises et stables en pixels selon coverSize
+  const coverDimensions = useMemo(() => {
+    switch (coverSize) {
+      case 'small':
+        return { size: 160, columnWidth: 320 };
+      case 'large':
+        return { size: 300, columnWidth: 420 };
+      case 'xlarge':
+        return { size: 400, columnWidth: 500 };
+      case 'medium':
+      default:
+        return { size: 230, columnWidth: 360 };
+    }
+  }, [coverSize]);
+
+  const coverSizeStyle: React.CSSProperties = useMemo(() => ({
+    width: `${coverDimensions.size}px`,
+    height: `${coverDimensions.size}px`,
+    minWidth: `${coverDimensions.size}px`,
+    minHeight: `${coverDimensions.size}px`,
+    maxWidth: `${coverDimensions.size}px`,
+    maxHeight: `${coverDimensions.size}px`,
+  }), [coverDimensions]);
+
+  const vinylSizeStyle: React.CSSProperties = useMemo(() => ({
+    width: `${coverDimensions.size}px`,
+    height: `${coverDimensions.size}px`,
+    minWidth: `${coverDimensions.size}px`,
+    minHeight: `${coverDimensions.size}px`,
+  }), [coverDimensions]);
+
+  // Calcul des classes de taille de pochette (fallback responsive)
   const coverSizeClasses = useMemo(() => {
     switch (coverSize) {
       case 'small':
-        return 'w-44 h-44 md:w-56 md:h-56';
+        return 'w-36 h-36 md:w-40 md:h-40';
       case 'large':
-        return 'w-64 h-64 md:w-88 md:h-88';
+        return 'w-64 h-64 md:w-72 md:h-72';
+      case 'xlarge':
+        return 'w-80 h-80 md:w-96 md:h-96 lg:w-[400px] lg:h-[400px]';
       case 'medium':
       default:
-        return 'w-56 h-56 md:w-72 md:h-72';
+        return 'w-48 h-48 md:w-56 md:h-56';
     }
   }, [coverSize]);
 
@@ -251,19 +413,26 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
     }
   }, [transitionSpeed]);
 
-  // Style de couleur active pour les paroles
-  const activeLyricStyle = useMemo(() => {
+  // Style de couleur et soulignement actif pour les paroles (garantit l'absence ou la présence de soulignement)
+  const activeLyricStyle: React.CSSProperties = useMemo(() => {
+    const base: React.CSSProperties = {
+      textDecoration: lyricsUnderline ? 'underline' : 'none',
+      textDecorationThickness: lyricsUnderline ? '3px' : undefined,
+      textUnderlineOffset: lyricsUnderline ? '8px' : undefined,
+    };
     if (lyricsHighlightColor === 'accent') {
       return {
+        ...base,
         color: 'var(--kairo-accent-primary, #10b981)',
         textShadow: lyricsGlow ? '0 0 20px var(--kairo-accent-primary, rgba(16, 185, 129, 0.4))' : 'none',
       };
     }
     return {
+      ...base,
       color: lyricsHighlightColor,
       textShadow: lyricsGlow ? `0 0 20px ${lyricsHighlightColor}66` : 'none',
     };
-  }, [lyricsHighlightColor, lyricsGlow]);
+  }, [lyricsHighlightColor, lyricsGlow, lyricsUnderline]);
 
   // Contrôles de lecture réutilisables
   const renderPlaybackControls = (centered = false) => {
@@ -342,25 +511,25 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
       {/* Fond immersif flouté avec la pochette ou couleur dominante */}
       {isTrackActive && (
         <>
-          {layout === 'immersive' && blurBackground ? (
+          {layout === 'immersive' ? (
             // Fond immersif : Dégradé radial flou basé sur la couleur dominante
             <div
-              className="absolute inset-0 pointer-events-none scale-125 transition-opacity duration-700"
+              className="absolute inset-0 pointer-events-none scale-125 transition-all duration-500"
               style={{
                 background: `radial-gradient(circle at 50% 40%, ${dominantColor.hex} 0%, rgba(11, 15, 25, 0.95) 75%)`,
-                filter: `blur(${blurIntensity * 1.5}px)`,
-                opacity: Math.max(0.15, Math.min(1.0, (overlayBrightness / 100) * 0.75)),
+                filter: blurBackground ? `blur(${Math.max(0, blurIntensity * 1.5)}px)` : 'none',
+                opacity: Math.max(0.2, Math.min(1.0, (overlayBrightness / 100) * 0.85)),
               }}
             />
           ) : (
             // Fond standard karaoké flouté avec la jaquette
             track?.coverUrl && (
               <div
-                className="absolute inset-0 bg-cover bg-center scale-110 pointer-events-none transition-opacity duration-700"
+                className="absolute inset-0 bg-cover bg-center scale-110 pointer-events-none transition-all duration-500"
                 style={{
                   backgroundImage: `url(${track.coverUrl})`,
-                  filter: blurBackground ? `blur(${blurIntensity}px)` : 'none',
-                  opacity: Math.max(0.05, Math.min(1.0, (overlayBrightness / 100) * 0.45)),
+                  filter: blurBackground ? `blur(${Math.max(0, blurIntensity)}px)` : 'none',
+                  opacity: Math.max(0.15, Math.min(1.0, (overlayBrightness / 100) * 0.7)),
                 }}
               />
             )
@@ -430,7 +599,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
         <div className="flex items-center gap-2">
           {onMinimize && (
             <button
-              onClick={onMinimize}
+              onClick={() => handleExitWithAnim('minimize')}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all cursor-pointer shadow-xs"
               style={{
                 borderColor: 'var(--kairo-accent-secondary, #38bdf8)',
@@ -445,7 +614,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
           )}
 
           <button
-            onClick={onExit}
+            onClick={() => handleExitWithAnim('exit')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer"
             style={{
               borderColor: 'var(--kairo-border-color, rgba(255, 255, 255, 0.2))',
@@ -512,7 +681,10 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
           <div className="w-full max-w-5xl h-full max-h-[560px] flex flex-col md:flex-row items-center justify-center gap-8 md:gap-14 my-auto">
             {/* Centre/Gauche : Grande pochette avec ombre douce teintée par la couleur dominante */}
             {showCover && (
-              <div className="flex flex-col items-center shrink-0 space-y-5 h-full justify-center">
+              <div
+                style={{ width: `${coverDimensions.columnWidth}px`, minWidth: `${coverDimensions.columnWidth}px` }}
+                className="flex flex-col items-center shrink-0 space-y-5 h-full justify-center transition-all duration-300"
+              >
                 <div className="relative group shrink-0">
                   {/* Effet vinyle optionnel */}
                   {vinylRotation && (
@@ -521,6 +693,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         track.isPlaying ? 'animate-spin-slow' : ''
                       }`}
                       style={{
+                        ...vinylSizeStyle,
                         backgroundColor: '#0a0d14',
                         borderColor: dominantColor.hex,
                         animationDuration: vinylSpeed === 'fast' ? '10s' : vinylSpeed === 'slow' ? '32s' : '20s',
@@ -533,8 +706,9 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                   )}
 
                   <div
-                    className={`relative ${coverSizeClasses} rounded-3xl overflow-hidden border-2 shadow-2xl transition-transform duration-500 hover:scale-[1.02]`}
+                    className={`relative ${coverSizeClasses} rounded-3xl overflow-hidden border-2 shadow-2xl transition-all duration-500 hover:scale-[1.02]`}
                     style={{
+                      ...coverSizeStyle,
                       borderColor: 'var(--kairo-border-color, rgba(255, 255, 255, 0.2))',
                       boxShadow: `0 20px 50px -10px ${dominantColor.hex}55`,
                       backgroundColor: 'var(--kairo-bg-card, #1e293b)',
@@ -641,20 +815,28 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         : 'text-left'
                     }`}
                   >
-                    {lyrics.map((line, idx) => {
-                      const isActive = idx === activeLyricIndex;
-                      const isPast = idx < activeLyricIndex;
+                    {displayedLyrics.map((line) => {
+                      const isActive = line.originalIndex === activeLyricIndex;
+                      const isPast = line.originalIndex < activeLyricIndex;
+                      const alignOrigin =
+                        lyricsAlignment === 'center'
+                          ? 'origin-center'
+                          : lyricsAlignment === 'right'
+                          ? 'origin-right'
+                          : 'origin-left';
 
                       return (
                         <p
-                          key={idx}
-                          style={isActive ? activeLyricStyle : undefined}
-                          className={`font-bold leading-relaxed cursor-default transition-colors duration-200 break-words whitespace-normal ${lyricsFontClass} ${
+                          key={line.originalIndex}
+                          style={isActive ? activeLyricStyle : { textDecoration: 'none' }}
+                          className={`font-bold leading-relaxed cursor-default transition-all duration-300 break-words whitespace-normal ${lyricsFontClass} ${
                             isActive
-                              ? 'opacity-100 underline decoration-[3px] underline-offset-8'
+                              ? `${lyricsUnderline ? 'underline decoration-[3px] underline-offset-8' : '!no-underline'} ${
+                                  lyricsActiveScale ? `scale-105 md:scale-110 ${alignOrigin}` : ''
+                                } opacity-100`
                               : isPast
-                              ? 'opacity-35 text-slate-300'
-                              : 'opacity-65 text-slate-200'
+                              ? 'opacity-35 text-slate-300 !no-underline'
+                              : 'opacity-65 text-slate-200 !no-underline'
                           }`}
                         >
                           {line.text}
@@ -672,10 +854,13 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
       {/* CAS 2 : LAYOUT "KARAOKE" (Standard épuré 2 colonnes avec focus défilement paroles) */}
       {isTrackActive && track && layout === 'karaoke' && (
         <main className="relative z-10 flex-1 w-full h-full flex items-center justify-center p-6 md:p-10 overflow-hidden">
-          <div className="w-full max-w-7xl h-full max-h-[620px] flex flex-row items-stretch gap-8 md:gap-12 overflow-hidden">
+          <div className="w-full max-w-7xl h-full max-h-[85vh] md:max-h-[680px] flex flex-row items-stretch gap-8 md:gap-12 overflow-hidden">
             {/* Colonne Gauche : Pochette vinyle tournante */}
             {showCover && (
-              <div className="w-[340px] md:w-[400px] shrink-0 flex flex-col items-center justify-center text-center space-y-4 h-full my-auto">
+              <div
+                style={{ width: `${coverDimensions.columnWidth}px`, minWidth: `${coverDimensions.columnWidth}px` }}
+                className="shrink-0 flex flex-col items-center justify-center text-center space-y-4 h-full my-auto transition-all duration-300"
+              >
                 <div className="relative group shrink-0">
                   {vinylRotation && (
                     <div
@@ -683,6 +868,7 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         track.isPlaying ? 'animate-spin-slow' : ''
                       }`}
                       style={{
+                        ...vinylSizeStyle,
                         backgroundColor: '#0f172a',
                         borderColor: '#1e293b',
                         animationDuration: vinylSpeed === 'fast' ? '10s' : vinylSpeed === 'slow' ? '32s' : '20s',
@@ -695,8 +881,9 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                   )}
 
                   <div
-                    className={`relative ${coverSizeClasses} rounded-3xl overflow-hidden border-2 shadow-2xl`}
+                    className={`relative ${coverSizeClasses} rounded-3xl overflow-hidden border-2 shadow-2xl transition-all duration-300`}
                     style={{
+                      ...coverSizeStyle,
                       borderColor: 'var(--kairo-border-color, rgba(255, 255, 255, 0.2))',
                       backgroundColor: 'var(--kairo-bg-card, #1e293b)',
                     }}
@@ -800,20 +987,28 @@ export const ScreensaverView: React.FC<ScreensaverViewProps> = ({
                         : 'text-left'
                     }`}
                   >
-                    {lyrics.map((line, idx) => {
-                      const isActive = idx === activeLyricIndex;
-                      const isPast = idx < activeLyricIndex;
+                    {displayedLyrics.map((line) => {
+                      const isActive = line.originalIndex === activeLyricIndex;
+                      const isPast = line.originalIndex < activeLyricIndex;
+                      const alignOrigin =
+                        lyricsAlignment === 'center'
+                          ? 'origin-center'
+                          : lyricsAlignment === 'right'
+                          ? 'origin-right'
+                          : 'origin-left';
 
                       return (
                         <p
-                          key={idx}
-                          style={isActive ? activeLyricStyle : undefined}
-                          className={`font-bold leading-relaxed cursor-default transition-colors duration-200 break-words whitespace-normal ${lyricsFontClass} ${
+                          key={line.originalIndex}
+                          style={isActive ? activeLyricStyle : { textDecoration: 'none' }}
+                          className={`font-bold leading-relaxed cursor-default transition-all duration-300 break-words whitespace-normal ${lyricsFontClass} ${
                             isActive
-                              ? 'opacity-100 underline decoration-[3px] underline-offset-8'
+                              ? `${lyricsUnderline ? 'underline decoration-[3px] underline-offset-8' : '!no-underline'} ${
+                                  lyricsActiveScale ? `scale-105 md:scale-110 ${alignOrigin}` : ''
+                                } opacity-100`
                               : isPast
-                              ? 'opacity-35 text-slate-300'
-                              : 'opacity-65 text-slate-200'
+                              ? 'opacity-35 text-slate-300 !no-underline'
+                              : 'opacity-65 text-slate-200 !no-underline'
                           }`}
                         >
                           {line.text}

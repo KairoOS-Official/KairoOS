@@ -14,7 +14,10 @@ pub use plugins::{
     PluginConfigRecord, PluginContributesConfig, PluginContributionPayload, PluginDetail,
     PluginHostConfig, PluginInfo, PluginManager, PluginManifest, PluginType,
 };
-pub use remote::{start_remote_server, start_remote_server_with_shutdown, RemoteConfig};
+pub use remote::{
+    start_remote_server, start_remote_server_with_shutdown, RemoteConfig, RemoteEvent,
+    RemoteEventCallback,
+};
 pub use scanner::RomScanner;
 
 #[cfg(test)]

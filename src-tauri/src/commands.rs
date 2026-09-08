@@ -25,9 +25,12 @@ pub fn save_app_settings(
     window: Window,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    use tauri::Emitter;
     let _ = window.set_fullscreen(settings.fullscreen);
     let _ = window.set_always_on_top(settings.always_on_top);
-    state.db.save_app_settings(&settings).map_err(|e| e.to_string())
+    state.db.save_app_settings(&settings).map_err(|e| e.to_string())?;
+    let _ = window.emit("kairo://settings-updated", &settings);
+    Ok(())
 }
 
 #[tauri::command]
@@ -522,17 +525,21 @@ pub fn get_theme(id: String) -> Result<kairo_core::Theme, String> {
 
 /// Définit le thème actif et met à jour settings.json
 #[tauri::command]
-pub fn set_theme(id: String, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+pub fn set_theme(id: String, window: tauri::Window, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+    use tauri::Emitter;
     let theme = get_theme(id.clone())?;
     let mut settings = state.db.get_app_settings().map_err(|e| e.to_string())?;
-    settings.theme = id;
+    settings.theme = id.clone();
     state.db.save_app_settings(&settings).map_err(|e| e.to_string())?;
+    let _ = window.emit("kairo://theme-changed", &id);
+    let _ = window.emit("kairo://settings-updated", &settings);
     Ok(theme)
 }
 
 /// Sauvegarde les modifications complètes d'un thème (couleurs, disposition, polices)
 #[tauri::command]
-pub fn save_theme(mut theme: kairo_core::Theme, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+pub fn save_theme(mut theme: kairo_core::Theme, window: tauri::Window, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+    use tauri::Emitter;
     let themes_dir = resolve_themes_dir();
     let theme_dir = themes_dir.join(&theme.id);
     let _ = std::fs::create_dir_all(&theme_dir);
@@ -552,7 +559,11 @@ pub fn save_theme(mut theme: kairo_core::Theme, state: State<'_, AppState>) -> R
 
     let mut settings = state.db.get_app_settings().map_err(|e| e.to_string())?;
     settings.theme = theme.id.clone();
-    let _ = state.db.save_app_settings(&settings);
+    state.db.save_app_settings(&settings).map_err(|e| e.to_string())?;
+
+    let _ = window.emit("kairo://theme-updated", &theme.id);
+    let _ = window.emit("kairo://theme-changed", &theme.id);
+    let _ = window.emit("kairo://settings-updated", &settings);
 
     Ok(theme)
 }

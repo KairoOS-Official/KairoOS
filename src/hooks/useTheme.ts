@@ -436,6 +436,78 @@ export function useTheme() {
     reloadThemes();
   }, []);
 
+  // Synchronisation en direct des thèmes reçus du backend (ex: modifiés depuis kairo-remote)
+  useEffect(() => {
+    let unlistenThemeChanged: (() => void) | undefined;
+    let unlistenThemeUpdated: (() => void) | undefined;
+
+    try {
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        // 1. Quand le thème actif change (ex: sélectionné depuis le mobile / remote)
+        listen<string>('kairo://theme-changed', async (event) => {
+          const themeId = event.payload;
+          console.log('[useTheme] Changement de thème reçu en temps réel:', themeId);
+          try {
+            const list = await getThemes();
+            if (list && list.length > 0) {
+              setThemes(list);
+              const found = list.find((t) => t.id === themeId) || list.find((t) => t.is_active);
+              if (found) {
+                try {
+                  localStorage.setItem(LOCAL_STORAGE_THEME_KEY, JSON.stringify(found));
+                } catch {
+                  // ignore
+                }
+                setActiveTheme(found);
+                appliedThemeRef.current = found;
+                setPreviewThemeItem(null);
+                injectThemeVariables(found);
+              }
+            }
+          } catch (err) {
+            console.error('[useTheme] Erreur synchronisation thème reçu:', err);
+          }
+        }).then((fn) => {
+          unlistenThemeChanged = fn;
+        }).catch(() => {});
+
+        // 2. Quand les couleurs ou paramètres d'un thème sont modifiés
+        listen<string>('kairo://theme-updated', async (event) => {
+          const themeId = event.payload;
+          console.log('[useTheme] Mise à jour de thème reçue en temps réel:', themeId);
+          try {
+            const list = await getThemes();
+            if (list && list.length > 0) {
+              setThemes(list);
+              const found = list.find((t) => t.id === themeId);
+              if (found && (appliedThemeRef.current.id === themeId || activeTheme.id === themeId)) {
+                try {
+                  localStorage.setItem(LOCAL_STORAGE_THEME_KEY, JSON.stringify(found));
+                } catch {
+                  // ignore
+                }
+                setActiveTheme(found);
+                appliedThemeRef.current = found;
+                injectThemeVariables(found);
+              }
+            }
+          } catch (err) {
+            console.error('[useTheme] Erreur mise à jour thème reçu:', err);
+          }
+        }).then((fn) => {
+          unlistenThemeUpdated = fn;
+        }).catch(() => {});
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      if (unlistenThemeChanged) unlistenThemeChanged();
+      if (unlistenThemeUpdated) unlistenThemeUpdated();
+    };
+  }, [injectThemeVariables, activeTheme.id]);
+
   // Aperçu instantané sans sauvegarde
   const preview = useCallback(
     (theme: Theme) => {

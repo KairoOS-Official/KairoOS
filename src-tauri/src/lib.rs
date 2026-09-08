@@ -85,6 +85,41 @@ pub fn run() {
             let app_mode = Arc::new(RwLock::new(initial_mode));
 
             let plugin_manager = kairo_core::PluginManager::new(Some(db.clone()), Some(launcher.clone()));
+
+            // Pont temps-réel : connecter les événements du serveur distant à l'IPC Tauri (UI Desktop)
+            let app_handle_for_remote = app.handle().clone();
+            let app_mode_for_event = Arc::clone(&app_mode);
+            plugin_manager.set_remote_event_callback(Arc::new(move |event| {
+                use tauri::Emitter;
+                match event {
+                    kairo_core::RemoteEvent::SettingsUpdated(settings) => {
+                        if let Some(main_window) = app_handle_for_remote.get_webview_window("main") {
+                            let _ = main_window.set_fullscreen(settings.fullscreen);
+                            let _ = main_window.set_always_on_top(settings.always_on_top);
+                        }
+                        let _ = app_handle_for_remote.emit("kairo://settings-updated", *settings);
+                    }
+                    kairo_core::RemoteEvent::ThemeChanged(theme_id) => {
+                        let _ = app_handle_for_remote.emit("kairo://theme-changed", theme_id);
+                    }
+                    kairo_core::RemoteEvent::ThemeUpdated(theme_id) => {
+                        let _ = app_handle_for_remote.emit("kairo://theme-updated", theme_id);
+                    }
+                    kairo_core::RemoteEvent::KioskChanged(kiosk) => {
+                        if let Ok(mut mode) = app_mode_for_event.write() {
+                            *mode = if kiosk { "kiosk".to_string() } else { "admin".to_string() };
+                        }
+                        let _ = app_handle_for_remote.emit("kairo://kiosk-changed", kiosk);
+                    }
+                    kairo_core::RemoteEvent::EmulatorsUpdated(emus) => {
+                        let _ = app_handle_for_remote.emit("kairo://emulators-updated", emus);
+                    }
+                    kairo_core::RemoteEvent::PluginsUpdated => {
+                        let _ = app_handle_for_remote.emit("kairo://plugins-updated", ());
+                    }
+                }
+            }));
+
             plugin_manager.auto_start_enabled_plugins();
 
             // Appliquer le mode plein écran et always on top au démarrage selon les paramètres sauvegardés

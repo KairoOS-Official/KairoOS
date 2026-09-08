@@ -31,6 +31,14 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
   const [iframeSrc, setIframeSrc] = useState<string>('');
 
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const lastActiveModeRef = useRef<'fullscreen' | 'minimized'>('minimized');
+  const isManualFullscreenRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (viewMode === 'fullscreen' || viewMode === 'minimized') {
+      lastActiveModeRef.current = viewMode;
+    }
+  }, [viewMode]);
 
   // 1. Découverte dynamique de plugins contribuant un écran de veille (Règle 1 & 2)
   const discoverScreensaverPlugin = useCallback(async () => {
@@ -89,11 +97,9 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
 
   useEffect(() => {
     discoverScreensaverPlugin();
-    // Vérification périodique (au démarrage et si des plugins sont activés/désactivés)
-    const interval = setInterval(() => {
-      discoverScreensaverPlugin();
-    }, 4000);
-    return () => clearInterval(interval);
+    // Découverte sur événement uniquement (sans boucle permanente en arrière-plan)
+    window.addEventListener('kairo_plugins_changed', discoverScreensaverPlugin);
+    return () => window.removeEventListener('kairo_plugins_changed', discoverScreensaverPlugin);
   }, [discoverScreensaverPlugin]);
 
   // 2. Écoute des messages postMessage provenant de l'iframe du plugin
@@ -106,6 +112,11 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
       // Changement de mode visuel (fullscreen / minimized / hidden)
       if (type === 'screensaver_view_mode' && mode) {
         if (mode === 'fullscreen' || mode === 'minimized' || mode === 'hidden') {
+          if (event.data.manual !== undefined) {
+            isManualFullscreenRef.current = Boolean(event.data.manual);
+          } else if (mode === 'minimized' || mode === 'hidden') {
+            isManualFullscreenRef.current = false;
+          }
           setViewMode(mode);
         }
       } else if (type === 'screensaver_state') {
@@ -113,6 +124,7 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
           setViewMode((prev) => (prev === 'hidden' ? 'fullscreen' : prev));
         } else {
           setViewMode('hidden');
+          isManualFullscreenRef.current = false;
         }
       }
 
@@ -137,16 +149,21 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  const lastSettingsRef = useRef<Record<string, any> | null>(null);
+
   // Écoute de l'événement personnalisé de mise à jour des paramètres
   useEffect(() => {
     const handlePluginSettingsUpdate = (e: Event) => {
       const customEvt = e as CustomEvent;
       const newSettings = customEvt.detail?.settings;
-      if (newSettings && iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage(
-          { type: 'kairo_update_settings', settings: newSettings },
-          '*'
-        );
+      if (newSettings) {
+        lastSettingsRef.current = newSettings;
+        if (iframeRef.current?.contentWindow) {
+          iframeRef.current.contentWindow.postMessage(
+            { type: 'kairo_update_settings', settings: newSettings },
+            '*'
+          );
+        }
       }
     };
 
@@ -154,12 +171,58 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
     return () => window.removeEventListener('kairo_update_plugin_settings', handlePluginSettingsUpdate);
   }, []);
 
+  // Écoute des mises à jour émises depuis le core Tauri ou l'interface à distance
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    const listenTauri = async () => {
+      try {
+        const { listen } = await import('@tauri-apps/api/event');
+        unlisten = await listen<any>('kairo://plugins-updated', async () => {
+          if (activePlugin?.id) {
+            try {
+              const detail = await getPlugin(activePlugin.id);
+              if (detail?.settings) {
+                lastSettingsRef.current = detail.settings;
+                if (iframeRef.current?.contentWindow) {
+                  iframeRef.current.contentWindow.postMessage(
+                    { type: 'kairo_update_settings', settings: detail.settings },
+                    '*'
+                  );
+                }
+              }
+            } catch (_) {}
+          }
+        });
+      } catch (_) {}
+    };
+    listenTauri();
+    return () => {
+      if (unlisten) unlisten();
+    };
+  }, [activePlugin]);
+
   // 3. Raccourci global touche Inser (Insert) et déblocage audio instantané
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // Débloquer l'élément audio du lecteur Spotify dans l'iframe dès une touche pressée
       if (iframeRef.current?.contentWindow) {
         iframeRef.current.contentWindow.postMessage({ type: 'kairo_unlock_audio' }, '*');
+      }
+
+      // Sortie exclusive du mode maximisé avec Échap (Escape)
+      if (e.key === 'Escape' || e.code === 'Escape') {
+        if (viewMode === 'fullscreen') {
+          e.preventDefault();
+          isManualFullscreenRef.current = false;
+          setViewMode('minimized');
+          if (iframeRef.current?.contentWindow) {
+            iframeRef.current.contentWindow.postMessage(
+              { type: 'kairo_set_view_mode', mode: 'minimized', manual: false },
+              '*'
+            );
+          }
+          return;
+        }
       }
 
       if (e.key === 'Insert' || e.code === 'Insert') {
@@ -173,10 +236,11 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
           } else {
             nextMode = isGameRunning ? 'hidden' : 'fullscreen';
           }
+          isManualFullscreenRef.current = nextMode === 'fullscreen';
 
           if (iframeRef.current?.contentWindow) {
             iframeRef.current.contentWindow.postMessage(
-              { type: 'kairo_set_view_mode', mode: nextMode },
+              { type: 'kairo_set_view_mode', mode: nextMode, manual: true },
               '*'
             );
           }
@@ -199,30 +263,32 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
     };
   }, [isGameRunning]);
 
-  // 4. Détection de mouvement globale :
-  // Si un mouvement (souris, clavier, tactile, molette, manette) est détecté alors que l'affichage est maximisé,
-  // il doit immédiatement revenir en mode minimisé.
+  // 4. Détection d'activité et touche B de la manette :
+  // Le mode maximisé persiste et ne se quitte que via le bouton dédié ou la touche B de la manette.
   useEffect(() => {
     let lastActivityTime = Date.now();
+    let lastBPress = 0;
 
     const handleUserMotion = () => {
       const now = Date.now();
       if (now - lastActivityTime < 30) return;
       lastActivityTime = now;
 
-      if (iframeRef.current?.contentWindow) {
-        iframeRef.current.contentWindow.postMessage({ type: 'kairo_unlock_audio' }, '*');
-        iframeRef.current.contentWindow.postMessage({ type: 'kairo_activity' }, '*');
-      }
-
-      if (viewMode === 'fullscreen') {
+      // Si le mode maximisé a été activé AUTOMATIQUEMENT pour la veille :
+      // N'importe quel mouvement ou bouton quitte immédiatement la page pour revenir en minimisé !
+      if (viewMode === 'fullscreen' && !isManualFullscreenRef.current) {
         setViewMode('minimized');
         if (iframeRef.current?.contentWindow) {
           iframeRef.current.contentWindow.postMessage(
-            { type: 'kairo_set_view_mode', mode: 'minimized' },
+            { type: 'kairo_set_view_mode', mode: 'minimized', manual: false },
             '*'
           );
         }
+      }
+
+      if (iframeRef.current?.contentWindow) {
+        iframeRef.current.contentWindow.postMessage({ type: 'kairo_unlock_audio' }, '*');
+        iframeRef.current.contentWindow.postMessage({ type: 'kairo_activity' }, '*');
       }
     };
 
@@ -244,6 +310,23 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
 
         for (const gp of gamepads) {
           if (!gp) continue;
+
+          // Touche B (Bouton 1) -> Sortie exclusive du mode maximisé
+          if (gp.buttons[1]?.pressed && viewMode === 'fullscreen') {
+            const now = Date.now();
+            if (now - lastBPress > 350) {
+              lastBPress = now;
+              isManualFullscreenRef.current = false;
+              setViewMode('minimized');
+              if (iframeRef.current?.contentWindow) {
+                iframeRef.current.contentWindow.postMessage(
+                  { type: 'kairo_set_view_mode', mode: 'minimized', manual: false },
+                  '*'
+                );
+              }
+            }
+          }
+
           for (let i = 0; i < gp.buttons.length; i++) {
             if (gp.buttons[i]?.pressed) {
               hasGamepadInput = true;
@@ -277,10 +360,13 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
     const handleOpenMusicPlayer = (e: Event) => {
       const customEvt = e as CustomEvent;
       const targetMode: ScreensaverVisualMode = customEvt.detail?.mode || 'fullscreen';
+      if (targetMode === 'fullscreen') {
+        isManualFullscreenRef.current = true;
+      }
       setViewMode(targetMode);
       if (iframeRef.current?.contentWindow) {
         iframeRef.current.contentWindow.postMessage(
-          { type: 'kairo_set_view_mode', mode: targetMode },
+          { type: 'kairo_set_view_mode', mode: targetMode, manual: true },
           '*'
         );
       }
@@ -316,15 +402,21 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
   const isMinimized = viewMode === 'minimized' && !isGameRunning;
   const isHidden = viewMode === 'hidden' || isGameRunning;
 
-  let containerClasses = 'fixed transition-all duration-300 ease-out select-none';
+
+  let containerClasses = 'fixed transition-all duration-300 ease-out select-none origin-bottom-right overflow-hidden';
 
   if (isFullscreen) {
-    containerClasses += ' inset-0 w-full h-full z-[9990] opacity-100 pointer-events-auto bg-slate-950';
+    containerClasses += ' bottom-0 right-0 w-full h-full z-[9990] opacity-100 pointer-events-auto bg-slate-950 rounded-none border-transparent';
   } else if (isMinimized) {
     containerClasses +=
-      ' bottom-6 right-6 w-96 h-28 z-[9995] opacity-100 pointer-events-auto rounded-2xl shadow-2xl overflow-hidden border border-white/15';
+      ' bottom-6 right-6 w-96 h-28 z-[9995] opacity-100 pointer-events-auto rounded-2xl shadow-2xl border border-white/15';
   } else {
-    containerClasses += ' inset-0 w-full h-full -z-[9990] opacity-0 pointer-events-none';
+    // Mode caché : ranger vers la droite jusqu'à disparaître
+    if (lastActiveModeRef.current === 'fullscreen') {
+      containerClasses += ' bottom-0 right-0 w-full h-full -z-[9990] opacity-0 pointer-events-none scale-95';
+    } else {
+      containerClasses += ' bottom-6 right-6 w-96 h-28 -z-[9990] opacity-0 pointer-events-none translate-x-[calc(100%+3rem)]';
+    }
   }
 
   return (
@@ -335,6 +427,14 @@ export const PluginScreensaverHost: React.FC<PluginScreensaverHostProps> = ({
       <iframe
         ref={iframeRef}
         src={iframeSrc}
+        onLoad={() => {
+          if (lastSettingsRef.current && iframeRef.current?.contentWindow) {
+            iframeRef.current.contentWindow.postMessage(
+              { type: 'kairo_update_settings', settings: lastSettingsRef.current },
+              '*'
+            );
+          }
+        }}
         allow="encrypted-media *; autoplay *; clipboard-write *"
         className="w-full h-full border-none bg-transparent"
         title="KaïroOS Plugin Screensaver Host"

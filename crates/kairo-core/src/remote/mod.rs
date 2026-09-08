@@ -12,9 +12,31 @@ use serde::{Deserialize, Serialize};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::{ServeDir, ServeFile};
 
+use std::sync::Arc;
+
 use crate::db::Database;
 use crate::launcher::Launcher;
 use crate::models::{AppSettings, Emulator, Game};
+
+/// Événements émis par le serveur distant en temps réel
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "payload")]
+pub enum RemoteEvent {
+    #[serde(rename = "settings_updated")]
+    SettingsUpdated(Box<AppSettings>),
+    #[serde(rename = "theme_changed")]
+    ThemeChanged(String),
+    #[serde(rename = "theme_updated")]
+    ThemeUpdated(String),
+    #[serde(rename = "kiosk_changed")]
+    KioskChanged(bool),
+    #[serde(rename = "emulators_updated")]
+    EmulatorsUpdated(Vec<Emulator>),
+    #[serde(rename = "plugins_updated")]
+    PluginsUpdated,
+}
+
+pub type RemoteEventCallback = Arc<dyn Fn(RemoteEvent) + Send + Sync>;
 
 /// Configuration du serveur distant (config/remote.json)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -93,6 +115,15 @@ pub struct RemoteServerState {
     pub db: Database,
     pub launcher: Launcher,
     pub config_dir: PathBuf,
+    pub event_callback: Option<RemoteEventCallback>,
+}
+
+impl RemoteServerState {
+    pub fn notify(&self, event: RemoteEvent) {
+        if let Some(cb) = &self.event_callback {
+            cb(event);
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -298,7 +329,7 @@ fn verify_pin(headers: &HeaderMap, required_pin: &str) -> bool {
 
 /// Démarre le serveur Axum en tâche de fond dans son propre runtime Tokio
 pub fn start_remote_server(db: Database, launcher: Launcher) -> std::thread::JoinHandle<()> {
-    let (handle, _tx) = start_remote_server_with_shutdown(db, launcher);
+    let (handle, _tx) = start_remote_server_with_shutdown(db, launcher, None);
     handle
 }
 
@@ -306,6 +337,7 @@ pub fn start_remote_server(db: Database, launcher: Launcher) -> std::thread::Joi
 pub fn start_remote_server_with_shutdown(
     db: Database,
     launcher: Launcher,
+    event_callback: Option<RemoteEventCallback>,
 ) -> (std::thread::JoinHandle<()>, oneshot::Sender<()>) {
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
@@ -336,6 +368,7 @@ pub fn start_remote_server_with_shutdown(
                 db,
                 launcher,
                 config_dir: PathBuf::from("config"),
+                event_callback,
             };
 
             // Recherche dynamique du dossier PWA servi par le service builtin "remote_server"
@@ -836,6 +869,7 @@ async fn save_emulators(
         }
     }
 
+    state.notify(RemoteEvent::EmulatorsUpdated(emulators.clone()));
     (StatusCode::OK, Json(ApiResponse { success: true, data: Some(emulators), error: None }))
 }
 
@@ -863,7 +897,10 @@ async fn save_settings(
     }
 
     match state.db.save_app_settings(&new_settings) {
-        Ok(()) => (StatusCode::OK, Json(ApiResponse { success: true, data: Some(new_settings), error: None })),
+        Ok(()) => {
+            state.notify(RemoteEvent::SettingsUpdated(Box::new(new_settings.clone())));
+            (StatusCode::OK, Json(ApiResponse { success: true, data: Some(new_settings), error: None }))
+        }
         Err(err) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ApiResponse { success: false, data: None, error: Some(err.to_string()) }),
@@ -940,6 +977,8 @@ async fn lock_kiosk(
     let mut settings = state.db.get_app_settings().unwrap_or_default();
     settings.kiosk_mode = true;
     let _ = state.db.save_app_settings(&settings);
+    state.notify(RemoteEvent::KioskChanged(true));
+    state.notify(RemoteEvent::SettingsUpdated(Box::new(settings)));
 
     (StatusCode::OK, Json(ApiResponse { success: true, data: Some("Mode Kiosk activé"), error: None }))
 }
@@ -959,6 +998,8 @@ async fn unlock_kiosk(
     let mut settings = state.db.get_app_settings().unwrap_or_default();
     settings.kiosk_mode = false;
     let _ = state.db.save_app_settings(&settings);
+    state.notify(RemoteEvent::KioskChanged(false));
+    state.notify(RemoteEvent::SettingsUpdated(Box::new(settings)));
 
     (StatusCode::OK, Json(ApiResponse { success: true, data: Some("Mode Admin déverrouillé"), error: None }))
 }
@@ -1214,6 +1255,8 @@ async fn remote_set_active_theme(
             let content = std::fs::read_to_string(&json_path).unwrap_or_default();
             let mut theme: crate::models::Theme = serde_json::from_str(&content).unwrap_or_default();
             theme.is_active = true;
+            state.notify(RemoteEvent::ThemeChanged(req.id.clone()));
+            state.notify(RemoteEvent::SettingsUpdated(Box::new(settings)));
             (StatusCode::OK, Json(ApiResponse { success: true, data: Some(theme), error: None }))
         },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) })),
@@ -1266,10 +1309,13 @@ async fn remote_save_theme(
                 // Si le thème sauvegardé devient actif
                 if theme.is_active {
                     if let Ok(mut settings) = state.db.get_app_settings() {
-                        settings.theme = id;
+                        settings.theme = id.clone();
                         let _ = state.db.save_app_settings(&settings);
+                        state.notify(RemoteEvent::ThemeChanged(id.clone()));
+                        state.notify(RemoteEvent::SettingsUpdated(Box::new(settings)));
                     }
                 }
+                state.notify(RemoteEvent::ThemeUpdated(id));
                 (StatusCode::OK, Json(ApiResponse { success: true, data: Some(theme), error: None }))
             },
             Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse { success: false, data: None, error: Some(e.to_string()) })),
@@ -1282,7 +1328,7 @@ async fn remote_save_theme(
 async fn remote_delete_theme(
     AxumPath(id): AxumPath<String>,
     headers: HeaderMap,
-    State(_state): State<RemoteServerState>,
+    State(state): State<RemoteServerState>,
 ) -> impl IntoResponse {
     let config = RemoteConfig::load();
     if !verify_pin(&headers, &config.pin) {
@@ -1295,7 +1341,10 @@ async fn remote_delete_theme(
     let theme_dir = themes_dir.join(&id);
     if theme_dir.exists() {
         match std::fs::remove_dir_all(&theme_dir) {
-            Ok(_) => (StatusCode::OK, Json(ApiResponse::<String> { success: true, data: Some(format!("Thème '{}' supprimé", id)), error: None })),
+            Ok(_) => {
+                state.notify(RemoteEvent::ThemeUpdated(id.clone()));
+                (StatusCode::OK, Json(ApiResponse::<String> { success: true, data: Some(format!("Thème '{}' supprimé", id)), error: None }))
+            },
             Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<String> { success: false, data: None, error: Some(e.to_string()) })),
         }
     } else {
@@ -1339,6 +1388,7 @@ async fn remote_get_plugins() -> impl IntoResponse {
 async fn remote_toggle_plugin(
     AxumPath(id): AxumPath<String>,
     headers: HeaderMap,
+    State(state): State<RemoteServerState>,
     Json(req): Json<serde_json::Value>,
 ) -> impl IntoResponse {
     let config = RemoteConfig::load();
@@ -1360,6 +1410,7 @@ async fn remote_toggle_plugin(
     });
     entry.enabled = enabled;
     let _ = crate::plugins::PluginManager::save_plugins_config(&plugins_cfg);
+    state.notify(RemoteEvent::PluginsUpdated);
     (StatusCode::OK, Json(ApiResponse { success: true, data: Some(enabled), error: None }))
 }
 
@@ -1378,6 +1429,7 @@ async fn remote_get_plugin_settings(
 /// PUT /api/plugins/:id/settings — met à jour les réglages d'un plugin (merge)
 async fn remote_update_plugin_settings(
     AxumPath(id): AxumPath<String>,
+    State(state): State<RemoteServerState>,
     Json(new_settings): Json<std::collections::HashMap<String, serde_json::Value>>,
 ) -> impl IntoResponse {
     let mut config = crate::plugins::PluginManager::load_plugins_config();
@@ -1389,7 +1441,10 @@ async fn remote_update_plugin_settings(
         entry.settings.insert(k, v);
     }
     match crate::plugins::PluginManager::save_plugins_config(&config) {
-        Ok(_) => (StatusCode::OK, Json(ApiResponse { success: true, data: Some("OK"), error: None })),
+        Ok(_) => {
+            state.notify(RemoteEvent::PluginsUpdated);
+            (StatusCode::OK, Json(ApiResponse { success: true, data: Some("OK"), error: None }))
+        },
         Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(ApiResponse::<&str> { success: false, data: None, error: Some(e) })),
     }
 }

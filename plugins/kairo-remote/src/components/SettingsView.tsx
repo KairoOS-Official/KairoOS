@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Palette,
   Monitor,
@@ -146,8 +146,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setFeedback(null), 3500);
   };
 
+  // Synchronisation automatique temps réel (Debounce 300ms) vers la borne KaïroOS
+  const isInitialMount = useRef(true);
+  const isFetchingRef = useRef(false);
+
   // Chargement global initial
   const fetchAllData = async () => {
+    isFetchingRef.current = true;
     setLoading(true);
     try {
       const [
@@ -205,9 +210,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         const json = await pluginsRes.json();
         if (json.data) setPlugins(json.data);
       }
-    } catch (err: any) {
-      showFeedback('Erreur lors du chargement des configurations: ' + err.message, 'error');
+    } catch (e: any) {
+      showFeedback('Erreur chargement des données: ' + e.message, 'error');
     } finally {
+      setTimeout(() => {
+        isFetchingRef.current = false;
+      }, 200);
       setLoading(false);
     }
   };
@@ -215,6 +223,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  // Détection des modifications pour mise à jour immédiate de la borne
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    if (isFetchingRef.current) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      onSaveAppSettings(settings).catch((e) => {
+        console.warn('[SettingsView] Auto-save error:', e);
+      });
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [settings, onSaveAppSettings]);
 
   // Tester un chemin d'exécutable
   const handleTestPath = async (emulatorId: string, path: string) => {

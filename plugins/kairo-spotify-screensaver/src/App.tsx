@@ -79,6 +79,18 @@ interface StoredConfig {
   displaySettings?: ScreensaverDisplaySettings;
 }
 
+const parseBool = (v: any, fallback = false): boolean => {
+  if (v === undefined || v === null) return fallback;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+  }
+  return Boolean(v);
+};
+
 export default function App() {
   const { theme, isDark } = useKairoTheme();
 
@@ -169,6 +181,10 @@ export default function App() {
     transitionSpeed: 'smooth',
     lyricsHighlightColor: 'accent',
     lyricsGlow: true,
+    lyricsUnderline: false,
+    lyricsActiveScale: true,
+    lyricsLinesBefore: -1,
+    lyricsLinesAfter: -1,
   });
 
   // Appareils détectés sur le réseau Spotify + personnalisés
@@ -184,6 +200,15 @@ export default function App() {
   const [isFavorite, setIsFavorite] = useState<boolean>(false);
   const [isShuffle, setIsShuffle] = useState<boolean>(false);
   const lastActivityRef = useRef<number>(Date.now());
+  const isManualFullscreenRef = useRef<boolean>(false);
+  const [isFullscreenManual, setIsFullscreenManual] = useState<boolean>(false);
+
+  const setVisualMode = useCallback((mode: 'fullscreen' | 'minimized' | 'hidden', manual = false) => {
+    const isMan = mode === 'fullscreen' && manual;
+    isManualFullscreenRef.current = isMan;
+    setIsFullscreenManual(isMan);
+    setViewMode(mode);
+  }, []);
 
   // Références d'interpolation haute fréquence (50ms) pour une synchronisation fluide des paroles à 60fps
   const baseProgressRef = useRef<number>(0);
@@ -306,26 +331,30 @@ export default function App() {
           if (injected.spotify_token_expires_at) setSpotifyTokenExpiresAt(Number(injected.spotify_token_expires_at));
           setDisplaySettings((prev) => ({
             ...prev,
-            showCover: injected.show_cover ?? prev.showCover,
-            showLyrics: injected.show_lyrics ?? prev.showLyrics,
+            showCover: injected.show_cover !== undefined ? parseBool(injected.show_cover, prev.showCover) : prev.showCover,
+            showLyrics: injected.show_lyrics !== undefined ? parseBool(injected.show_lyrics, prev.showLyrics) : prev.showLyrics,
             overlayBrightness: Math.max(10, Math.min(100, injected.overlay_brightness ?? prev.overlayBrightness)),
             displayLayout: injected.display_layout ?? prev.displayLayout,
             lyricsFontSize: injected.lyrics_font_size ?? prev.lyricsFontSize,
             lyricsAlignment: injected.lyrics_alignment ?? prev.lyricsAlignment,
-            coverSize: injected.cover_size ?? prev.coverSize,
-            vinylRotation: injected.vinyl_rotation ?? prev.vinylRotation,
+            coverSize: injected.cover_size || injected.coverSize || prev.coverSize,
+            vinylRotation: injected.vinyl_rotation !== undefined ? parseBool(injected.vinyl_rotation, prev.vinylRotation) : prev.vinylRotation,
             vinylSpeed: injected.vinyl_speed ?? prev.vinylSpeed,
-            blurBackground: injected.blur_background ?? prev.blurBackground,
-            blurIntensity: injected.blur_intensity ?? prev.blurIntensity,
-            showControls: injected.show_controls ?? prev.showControls,
-            showProgressBar: injected.show_progress_bar ?? prev.showProgressBar,
-            showPlaylistName: injected.show_playlist_name ?? prev.showPlaylistName,
-            showAlbumName: injected.show_album_name ?? prev.showAlbumName,
-            showDeviceBadge: injected.show_device_badge ?? prev.showDeviceBadge,
-            showGamepadHints: injected.show_gamepad_hints ?? prev.showGamepadHints,
+            blurBackground: injected.blur_background !== undefined ? parseBool(injected.blur_background, prev.blurBackground) : prev.blurBackground,
+            blurIntensity: injected.blur_intensity !== undefined ? Number(injected.blur_intensity) : prev.blurIntensity,
+            showControls: injected.show_controls !== undefined ? parseBool(injected.show_controls, prev.showControls) : prev.showControls,
+            showProgressBar: injected.show_progress_bar !== undefined ? parseBool(injected.show_progress_bar, prev.showProgressBar) : prev.showProgressBar,
+            showPlaylistName: injected.show_playlist_name !== undefined ? parseBool(injected.show_playlist_name, prev.showPlaylistName) : prev.showPlaylistName,
+            showAlbumName: injected.show_album_name !== undefined ? parseBool(injected.show_album_name, prev.showAlbumName) : prev.showAlbumName,
+            showDeviceBadge: injected.show_device_badge !== undefined ? parseBool(injected.show_device_badge, prev.showDeviceBadge) : prev.showDeviceBadge,
+            showGamepadHints: injected.show_gamepad_hints !== undefined ? parseBool(injected.show_gamepad_hints, prev.showGamepadHints) : prev.showGamepadHints,
             transitionSpeed: injected.transition_speed ?? prev.transitionSpeed,
             lyricsHighlightColor: injected.lyrics_highlight_color ?? prev.lyricsHighlightColor,
-            lyricsGlow: injected.lyrics_glow ?? prev.lyricsGlow,
+            lyricsGlow: injected.lyrics_glow !== undefined ? parseBool(injected.lyrics_glow, prev.lyricsGlow) : prev.lyricsGlow,
+            lyricsUnderline: injected.lyrics_underline !== undefined ? parseBool(injected.lyrics_underline, false) : (injected.lyricsUnderline !== undefined ? parseBool(injected.lyricsUnderline, false) : prev.lyricsUnderline),
+            lyricsActiveScale: injected.lyrics_active_scale !== undefined ? parseBool(injected.lyrics_active_scale, true) : prev.lyricsActiveScale,
+            lyricsLinesBefore: injected.lyrics_lines_before !== undefined ? Number(injected.lyrics_lines_before) : prev.lyricsLinesBefore,
+            lyricsLinesAfter: injected.lyrics_lines_after !== undefined ? Number(injected.lyrics_lines_after) : prev.lyricsLinesAfter,
           }));
           loaded = true;
         }
@@ -376,26 +405,30 @@ export default function App() {
               if (detail.settings.idle_timeout_seconds) setIdleTimeoutSeconds(detail.settings.idle_timeout_seconds);
               setDisplaySettings((prev) => ({
                 ...prev,
-                showCover: detail.settings.show_cover ?? prev.showCover,
-                showLyrics: detail.settings.show_lyrics ?? prev.showLyrics,
+                showCover: detail.settings.show_cover !== undefined ? parseBool(detail.settings.show_cover, prev.showCover) : prev.showCover,
+                showLyrics: detail.settings.show_lyrics !== undefined ? parseBool(detail.settings.show_lyrics, prev.showLyrics) : prev.showLyrics,
                 overlayBrightness: detail.settings.overlay_brightness ?? prev.overlayBrightness,
                 displayLayout: detail.settings.display_layout ?? prev.displayLayout,
                 lyricsFontSize: detail.settings.lyrics_font_size ?? prev.lyricsFontSize,
                 lyricsAlignment: detail.settings.lyrics_alignment ?? prev.lyricsAlignment,
-                coverSize: detail.settings.cover_size ?? prev.coverSize,
-                vinylRotation: detail.settings.vinyl_rotation ?? prev.vinylRotation,
+                coverSize: detail.settings.cover_size || detail.settings.coverSize || prev.coverSize,
+                vinylRotation: detail.settings.vinyl_rotation !== undefined ? parseBool(detail.settings.vinyl_rotation, prev.vinylRotation) : prev.vinylRotation,
                 vinylSpeed: detail.settings.vinyl_speed ?? prev.vinylSpeed,
-                blurBackground: detail.settings.blur_background ?? prev.blurBackground,
-                blurIntensity: detail.settings.blur_intensity ?? prev.blurIntensity,
-                showControls: detail.settings.show_controls ?? prev.showControls,
-                showProgressBar: detail.settings.show_progress_bar ?? prev.showProgressBar,
-                showPlaylistName: detail.settings.show_playlist_name ?? prev.showPlaylistName,
-                showAlbumName: detail.settings.show_album_name ?? prev.showAlbumName,
-                showDeviceBadge: detail.settings.show_device_badge ?? prev.showDeviceBadge,
-                showGamepadHints: detail.settings.show_gamepad_hints ?? prev.showGamepadHints,
+                blurBackground: detail.settings.blur_background !== undefined ? parseBool(detail.settings.blur_background, prev.blurBackground) : prev.blurBackground,
+                blurIntensity: detail.settings.blur_intensity !== undefined ? Number(detail.settings.blur_intensity) : prev.blurIntensity,
+                showControls: detail.settings.show_controls !== undefined ? parseBool(detail.settings.show_controls, prev.showControls) : prev.showControls,
+                showProgressBar: detail.settings.show_progress_bar !== undefined ? parseBool(detail.settings.show_progress_bar, prev.showProgressBar) : prev.showProgressBar,
+                showPlaylistName: detail.settings.show_playlist_name !== undefined ? parseBool(detail.settings.show_playlist_name, prev.showPlaylistName) : prev.showPlaylistName,
+                showAlbumName: detail.settings.show_album_name !== undefined ? parseBool(detail.settings.show_album_name, prev.showAlbumName) : prev.showAlbumName,
+                showDeviceBadge: detail.settings.show_device_badge !== undefined ? parseBool(detail.settings.show_device_badge, prev.showDeviceBadge) : prev.showDeviceBadge,
+                showGamepadHints: detail.settings.show_gamepad_hints !== undefined ? parseBool(detail.settings.show_gamepad_hints, prev.showGamepadHints) : prev.showGamepadHints,
                 transitionSpeed: detail.settings.transition_speed ?? prev.transitionSpeed,
                 lyricsHighlightColor: detail.settings.lyrics_highlight_color ?? prev.lyricsHighlightColor,
-                lyricsGlow: detail.settings.lyrics_glow ?? prev.lyricsGlow,
+                lyricsGlow: detail.settings.lyrics_glow !== undefined ? parseBool(detail.settings.lyrics_glow, prev.lyricsGlow) : prev.lyricsGlow,
+                lyricsUnderline: detail.settings.lyrics_underline !== undefined ? parseBool(detail.settings.lyrics_underline, false) : (detail.settings.lyricsUnderline !== undefined ? parseBool(detail.settings.lyricsUnderline, false) : prev.lyricsUnderline),
+                lyricsActiveScale: detail.settings.lyrics_active_scale !== undefined ? parseBool(detail.settings.lyrics_active_scale, true) : prev.lyricsActiveScale,
+                lyricsLinesBefore: detail.settings.lyrics_lines_before !== undefined ? Number(detail.settings.lyrics_lines_before) : prev.lyricsLinesBefore,
+                lyricsLinesAfter: detail.settings.lyrics_lines_after !== undefined ? Number(detail.settings.lyrics_lines_after) : prev.lyricsLinesAfter,
               }));
             }
             setSpotifyToken((prev) => prev || detail.settings.spotify_access_token || '');
@@ -426,99 +459,66 @@ export default function App() {
         if (s.spotify_client_id !== undefined) setSpotifyClientId(s.spotify_client_id);
         if (Array.isArray(s.custom_devices)) setCustomDevices(s.custom_devices);
 
-        setDisplaySettings((prev) => ({
-          ...prev,
-          showCover: s.show_cover !== undefined ? Boolean(s.show_cover) : prev.showCover,
-          showLyrics: s.show_lyrics !== undefined ? Boolean(s.show_lyrics) : prev.showLyrics,
-          overlayBrightness: s.overlay_brightness !== undefined ? Number(s.overlay_brightness) : prev.overlayBrightness,
-          displayLayout: s.display_layout || prev.displayLayout,
-          lyricsFontSize: s.lyrics_font_size || prev.lyricsFontSize,
-          lyricsAlignment: s.lyrics_alignment || prev.lyricsAlignment,
-          coverSize: s.cover_size || prev.coverSize,
-          vinylRotation: s.vinyl_rotation !== undefined ? Boolean(s.vinyl_rotation) : prev.vinylRotation,
-          vinylSpeed: s.vinyl_speed || prev.vinylSpeed,
-          blurBackground: s.blur_background !== undefined ? Boolean(s.blur_background) : prev.blurBackground,
-          blurIntensity: s.blur_intensity !== undefined ? Number(s.blur_intensity) : prev.blurIntensity,
-          showControls: s.show_controls !== undefined ? Boolean(s.show_controls) : prev.showControls,
-          showProgressBar: s.show_progress_bar !== undefined ? Boolean(s.show_progress_bar) : prev.showProgressBar,
-          showPlaylistName: s.show_playlist_name !== undefined ? Boolean(s.show_playlist_name) : prev.showPlaylistName,
-          showAlbumName: s.show_album_name !== undefined ? Boolean(s.show_album_name) : prev.showAlbumName,
-          showDeviceBadge: s.show_device_badge !== undefined ? Boolean(s.show_device_badge) : prev.showDeviceBadge,
-          showGamepadHints: s.show_gamepad_hints !== undefined ? Boolean(s.show_gamepad_hints) : prev.showGamepadHints,
-          transitionSpeed: s.transition_speed || prev.transitionSpeed,
-          lyricsHighlightColor: s.lyrics_highlight_color || prev.lyricsHighlightColor,
-          lyricsGlow: s.lyrics_glow !== undefined ? Boolean(s.lyrics_glow) : prev.lyricsGlow,
-        }));
+        setDisplaySettings((prev) => {
+          const updated = {
+            ...prev,
+            showCover: s.show_cover !== undefined ? parseBool(s.show_cover, prev.showCover) : prev.showCover,
+            showLyrics: s.show_lyrics !== undefined ? parseBool(s.show_lyrics, prev.showLyrics) : prev.showLyrics,
+            overlayBrightness: s.overlay_brightness !== undefined ? Number(s.overlay_brightness) : prev.overlayBrightness,
+            displayLayout: s.display_layout || prev.displayLayout,
+            lyricsFontSize: s.lyrics_font_size || prev.lyricsFontSize,
+            lyricsAlignment: s.lyrics_alignment || prev.lyricsAlignment,
+            coverSize: s.cover_size || s.coverSize || prev.coverSize,
+            vinylRotation: s.vinyl_rotation !== undefined ? parseBool(s.vinyl_rotation, prev.vinylRotation) : prev.vinylRotation,
+            vinylSpeed: s.vinyl_speed || prev.vinylSpeed,
+            blurBackground: s.blur_background !== undefined ? parseBool(s.blur_background, prev.blurBackground) : prev.blurBackground,
+            blurIntensity: s.blur_intensity !== undefined ? Number(s.blur_intensity) : prev.blurIntensity,
+            showControls: s.show_controls !== undefined ? parseBool(s.show_controls, prev.showControls) : prev.showControls,
+            showProgressBar: s.show_progress_bar !== undefined ? parseBool(s.show_progress_bar, prev.showProgressBar) : prev.showProgressBar,
+            showPlaylistName: s.show_playlist_name !== undefined ? parseBool(s.show_playlist_name, prev.showPlaylistName) : prev.showPlaylistName,
+            showAlbumName: s.show_album_name !== undefined ? parseBool(s.show_album_name, prev.showAlbumName) : prev.showAlbumName,
+            showDeviceBadge: s.show_device_badge !== undefined ? parseBool(s.show_device_badge, prev.showDeviceBadge) : prev.showDeviceBadge,
+            showGamepadHints: s.show_gamepad_hints !== undefined ? parseBool(s.show_gamepad_hints, prev.showGamepadHints) : prev.showGamepadHints,
+            transitionSpeed: s.transition_speed || prev.transitionSpeed,
+            lyricsHighlightColor: s.lyrics_highlight_color || prev.lyricsHighlightColor,
+            lyricsGlow: s.lyrics_glow !== undefined ? parseBool(s.lyrics_glow, prev.lyricsGlow) : prev.lyricsGlow,
+            lyricsUnderline: s.lyrics_underline !== undefined ? parseBool(s.lyrics_underline, false) : (s.lyricsUnderline !== undefined ? parseBool(s.lyricsUnderline, false) : prev.lyricsUnderline),
+            lyricsActiveScale: s.lyrics_active_scale !== undefined ? parseBool(s.lyrics_active_scale, true) : prev.lyricsActiveScale,
+            lyricsLinesBefore: s.lyrics_lines_before !== undefined ? Number(s.lyrics_lines_before) : prev.lyricsLinesBefore,
+            lyricsLinesAfter: s.lyrics_lines_after !== undefined ? Number(s.lyrics_lines_after) : prev.lyricsLinesAfter,
+          };
+          try {
+            const currentSaved = localStorage.getItem(STORAGE_KEY);
+            const parsed = currentSaved ? JSON.parse(currentSaved) : {};
+            parsed.displaySettings = updated;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+          } catch (_) {}
+          return updated;
+        });
       } else if (e.data.type === 'kairo_set_view_mode') {
         if (e.data.mode === 'fullscreen' || e.data.mode === 'minimized' || e.data.mode === 'hidden') {
-          setViewMode(e.data.mode);
+          setVisualMode(e.data.mode, Boolean(e.data.manual));
         }
       } else if (e.data.type === 'kairo_toggle_player') {
-        setViewMode((prev) => (prev === 'fullscreen' ? 'minimized' : 'fullscreen'));
-      } else if (e.data.type === 'kairo_activity' || e.data.type === 'dismiss_screensaver') {
+        setVisualMode(viewMode === 'fullscreen' ? 'minimized' : 'fullscreen', true);
+      } else if (e.data.type === 'kairo_activity') {
         lastActivityRef.current = Date.now();
         setIdleSeconds(0);
-        // Détection de mouvement : Si un mouvement est détecté alors que l'affichage est en mode maximisé, il doit immédiatement revenir en mode minimisé
-        setViewMode((prev) => (prev === 'fullscreen' ? 'minimized' : prev));
+        // Si veille automatique (pas manuelle) : tout mouvement/bouton quitte vers minimisé
+        if (viewMode === 'fullscreen' && !isManualFullscreenRef.current) {
+          setVisualMode('minimized', false);
+        }
+      } else if (e.data.type === 'dismiss_screensaver') {
+        lastActivityRef.current = Date.now();
+        setIdleSeconds(0);
+        setVisualMode('minimized', false);
       }
     };
 
     window.addEventListener('message', handleHostMessage);
     return () => window.removeEventListener('message', handleHostMessage);
-  }, [viewMode]);
+  }, [viewMode, setVisualMode]);
 
-  // Rechargement proactif en arrière-plan des réglages depuis Tauri (garantit l'application temps réel sans redémarrage)
-  useEffect(() => {
-    const refreshSettingsFromTauri = async () => {
-      try {
-        const tauriInvoke =
-          (window as any).__TAURI__?.core?.invoke ||
-          (window.parent as any)?.__TAURI__?.core?.invoke;
-        if (tauriInvoke) {
-          const detail: any = await tauriInvoke('get_plugin', { id: 'kairo-spotify-screensaver' });
-          if (detail && detail.settings) {
-            const s = detail.settings;
-            if (s.operation_mode !== undefined) setOperationMode(s.operation_mode);
-            if (s.selected_device) setSelectedDevice(s.selected_device);
-            if (s.target_speaker && !s.selected_device) setSelectedDevice(s.target_speaker);
-            if (s.spotify_device_name) setBorneDeviceName(s.spotify_device_name);
-            if (s.idle_timeout_seconds) setIdleTimeoutSeconds(Number(s.idle_timeout_seconds));
-            if (s.spotify_access_token) setSpotifyToken((p) => s.spotify_access_token || p);
-            if (s.spotify_refresh_token) setSpotifyRefreshToken(s.spotify_refresh_token);
-            if (s.spotify_client_id) setSpotifyClientId(s.spotify_client_id);
-            if (Array.isArray(s.custom_devices)) setCustomDevices(s.custom_devices);
-
-            setDisplaySettings((prev) => ({
-              ...prev,
-              showCover: s.show_cover !== undefined ? Boolean(s.show_cover) : prev.showCover,
-              showLyrics: s.show_lyrics !== undefined ? Boolean(s.show_lyrics) : prev.showLyrics,
-              overlayBrightness: s.overlay_brightness !== undefined ? Number(s.overlay_brightness) : prev.overlayBrightness,
-              displayLayout: s.display_layout || prev.displayLayout,
-              lyricsFontSize: s.lyrics_font_size || prev.lyricsFontSize,
-              lyricsAlignment: s.lyrics_alignment || prev.lyricsAlignment,
-              coverSize: s.cover_size || prev.coverSize,
-              vinylRotation: s.vinyl_rotation !== undefined ? Boolean(s.vinyl_rotation) : prev.vinylRotation,
-              vinylSpeed: s.vinyl_speed || prev.vinylSpeed,
-              blurBackground: s.blur_background !== undefined ? Boolean(s.blur_background) : prev.blurBackground,
-              blurIntensity: s.blur_intensity !== undefined ? Number(s.blur_intensity) : prev.blurIntensity,
-              showControls: s.show_controls !== undefined ? Boolean(s.show_controls) : prev.showControls,
-              showProgressBar: s.show_progress_bar !== undefined ? Boolean(s.show_progress_bar) : prev.showProgressBar,
-              showPlaylistName: s.show_playlist_name !== undefined ? Boolean(s.show_playlist_name) : prev.showPlaylistName,
-              showAlbumName: s.show_album_name !== undefined ? Boolean(s.show_album_name) : prev.showAlbumName,
-              showDeviceBadge: s.show_device_badge !== undefined ? Boolean(s.show_device_badge) : prev.showDeviceBadge,
-              showGamepadHints: s.show_gamepad_hints !== undefined ? Boolean(s.show_gamepad_hints) : prev.showGamepadHints,
-              transitionSpeed: s.transition_speed || prev.transitionSpeed,
-              lyricsHighlightColor: s.lyrics_highlight_color || prev.lyricsHighlightColor,
-              lyricsGlow: s.lyrics_glow !== undefined ? Boolean(s.lyrics_glow) : prev.lyricsGlow,
-            }));
-          }
-        }
-      } catch (_) {}
-    };
-
-    const interval = setInterval(refreshSettingsFromTauri, 3000);
-    return () => clearInterval(interval);
-  }, []);
 
   // Synchronisation de l'état du screensaver vers KaïroOS
   useEffect(() => {
@@ -529,13 +529,14 @@ export default function App() {
             type: 'screensaver_view_mode',
             mode: viewMode,
             active: viewMode !== 'hidden',
+            manual: isFullscreenManual,
             pluginId: 'kairo-spotify-screensaver',
           },
           '*'
         );
       }
     } catch (_) {}
-  }, [viewMode]);
+  }, [viewMode, isFullscreenManual]);
 
   // Sauvegarde automatique et persistante en direct dès modification
   const isInitialPluginMountRef = useRef(true);
@@ -577,6 +578,7 @@ export default function App() {
             lyrics_font_size: displaySettings.lyricsFontSize,
             lyrics_alignment: displaySettings.lyricsAlignment,
             cover_size: displaySettings.coverSize,
+            coverSize: displaySettings.coverSize,
             vinyl_rotation: displaySettings.vinylRotation,
             vinyl_speed: displaySettings.vinylSpeed,
             blur_background: displaySettings.blurBackground,
@@ -590,6 +592,10 @@ export default function App() {
             transition_speed: displaySettings.transitionSpeed,
             lyrics_highlight_color: displaySettings.lyricsHighlightColor,
             lyrics_glow: displaySettings.lyricsGlow,
+            lyrics_underline: displaySettings.lyricsUnderline,
+            lyrics_active_scale: displaySettings.lyricsActiveScale,
+            lyrics_lines_before: displaySettings.lyricsLinesBefore,
+            lyrics_lines_after: displaySettings.lyricsLinesAfter,
             spotify_access_token: spotifyToken,
             custom_devices: customDevices,
             ...(spotifyRefreshToken ? { spotify_refresh_token: spotifyRefreshToken } : {}),
@@ -612,16 +618,17 @@ export default function App() {
     customDevices,
   ]);
 
-  useEffect(() => {
-    if (isInitialPluginMountRef.current) {
-      isInitialPluginMountRef.current = false;
-      return;
-    }
+  // Sauvegarde sur événement : déclenchée uniquement lors d'une modification utilisateur
+  const isUserInteractingRef = useRef(false);
+
+  const saveOnUserEvent = useCallback(() => {
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(performAutoSave, 200);
-    return () => {
-      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
-    };
+    autoSaveTimerRef.current = setTimeout(() => {
+      if (isUserInteractingRef.current) {
+        performAutoSave();
+        isUserInteractingRef.current = false;
+      }
+    }, 200);
   }, [performAutoSave]);
 
   // Ajout manuel d'une enceinte externe (résolution explicite du "bouton ajouter")
@@ -964,13 +971,18 @@ export default function App() {
     setIsShuffle(nextShuffle);
   };
 
-  // Détection d'activité utilisateur (clavier, souris, manette)
+  // Détection d'activité utilisateur (mise à jour du chronomètre d'inactivité)
   useEffect(() => {
     const onUserActivity = () => {
       lastActivityRef.current = Date.now();
       setIdleSeconds(0);
-      // Détection de mouvement : Si un mouvement est détecté alors que l'affichage est en mode maximisé, il doit immédiatement revenir en mode minimisé
-      setViewMode((prev) => (prev === 'fullscreen' ? 'minimized' : prev));
+
+      // Si maximisé AUTOMATIQUEMENT pour la veille (et pas manuellement) :
+      // N'importe quel mouvement ou bouton quitte immédiatement pour revenir en minimisé !
+      if (viewMode === 'fullscreen' && !isManualFullscreenRef.current) {
+        console.log('⚡ [Spotify Plugin] Activité détectée en veille auto -> retour en minimisé');
+        setVisualMode('minimized', false);
+      }
     };
 
     window.addEventListener('keydown', onUserActivity, { capture: true, passive: true });
@@ -1003,7 +1015,7 @@ export default function App() {
       window.removeEventListener('touchstart', onUserActivity, { capture: true });
       clearInterval(gamepadInterval);
     };
-  }, []);
+  }, [viewMode, setVisualMode]);
 
   // =========================================================================
   // LOGIQUE UNIFIÉE DU MODE HYBRIDE :
@@ -1038,19 +1050,16 @@ export default function App() {
         const currentIdle = Math.floor((now - lastActivityRef.current) / 1000);
         setIdleSeconds(currentIdle);
 
-        // Passage en mode maximisé : uniquement si l'appareil reste en veille plus longtemps que la durée définie
-        if (currentIdle >= idleTimeoutSeconds) {
-          if (viewMode !== 'fullscreen') {
-            console.log(`🌙 [Spotify Plugin] Veille (${currentIdle}s >= ${idleTimeoutSeconds}s) -> Maximisé`);
-            setViewMode('fullscreen');
-          }
-        } else {
-          // État par défaut : l'affichage doit toujours être minimisé lorsque de la musique est jouée sur l'enceinte ou sur la borne
-          if (viewMode !== 'minimized') {
-            console.log('🎵 [Spotify Plugin] Musique en cours sur borne ou enceinte -> Toujours minimisé');
-            setViewMode('minimized');
-          }
+        // État par défaut : si masqué au démarrage, passer en minimisé
+        if (viewMode === 'hidden') {
+          console.log('🎵 [Spotify Plugin] Musique démarrée sur borne ou enceinte -> Minimisé');
+          setVisualMode('minimized', false);
+        } else if (viewMode === 'minimized' && currentIdle >= idleTimeoutSeconds) {
+          // Passage en mode maximisé automatique si l'appareil reste en veille
+          console.log(`🌙 [Spotify Plugin] Veille (${currentIdle}s >= ${idleTimeoutSeconds}s) -> Maximisé auto`);
+          setVisualMode('fullscreen', false);
         }
+        // Persistance : si l'utilisateur est en mode maximisé (fullscreen), il y reste tant qu'il ne choisit pas d'en sortir !
         return;
       }
 
@@ -1062,12 +1071,12 @@ export default function App() {
       setIdleSeconds(0);
       if (viewMode !== 'hidden') {
         console.log('🔇 [Spotify Plugin] Autre enceinte ou arrêt -> On affiche rien (hidden)');
-        setViewMode('hidden');
+        setVisualMode('hidden', false);
       }
     }, 200);
 
     return () => clearInterval(interval);
-  }, [currentTrack, isBornePlayback, selectedDevice, viewMode, idleTimeoutSeconds]);
+  }, [currentTrack, isBornePlayback, selectedDevice, viewMode, idleTimeoutSeconds, setVisualMode]);
 
   // Liste combinée des appareils disponibles + custom
   const allSelectableDevices = useMemo(() => {
@@ -1092,7 +1101,8 @@ export default function App() {
         currentProgressMs={progressMs}
         displaySettings={displaySettings}
         isBornePlaying={isBornePlayback(currentTrack)}
-        onMinimize={() => setViewMode('minimized')}
+        isManual={isFullscreenManual}
+        onMinimize={() => setVisualMode('minimized', false)}
         onExit={() => {
           const isPlaying = Boolean(currentTrack?.isPlaying);
           const trackDevName = (currentTrack?.deviceName || '').trim().toLowerCase();
@@ -1107,12 +1117,7 @@ export default function App() {
             )
           );
           const isAuthorizedPlaying = Boolean(isPlaying && currentTrack && (isBorne || isTargetSpeaker));
-
-          if (isAuthorizedPlaying) {
-            setViewMode('minimized');
-          } else {
-            setViewMode('hidden');
-          }
+          setVisualMode(isAuthorizedPlaying ? 'minimized' : 'hidden', false);
           setIdleSeconds(0);
         }}
         isDemo={Boolean(spotifyToken && tokenAnalysis.status !== 'valid_format')}
@@ -1135,9 +1140,9 @@ export default function App() {
           track={currentTrack}
           lyrics={lyrics}
           currentProgressMs={progressMs}
-          onMaximize={() => setViewMode('fullscreen')}
+          onMaximize={() => setVisualMode('fullscreen', true)}
           onClose={() => {
-            setViewMode('hidden');
+            setVisualMode('hidden', false);
             if (currentTrack?.id) dismissedTrackIdRef.current = currentTrack.id;
           }}
           isDemo={Boolean(spotifyToken && tokenAnalysis.status !== 'valid_format')}
@@ -1151,6 +1156,14 @@ export default function App() {
   // 3. Vue Cachée ou en Attente de Lecture
   return (
     <div
+      onInputCapture={() => {
+        isUserInteractingRef.current = true;
+        saveOnUserEvent();
+      }}
+      onClickCapture={() => {
+        isUserInteractingRef.current = true;
+        saveOnUserEvent();
+      }}
       className="min-h-screen p-8 select-none transition-colors duration-300"
       style={{
         backgroundColor: 'var(--kairo-bg-primary, #0f172a)',
@@ -1191,7 +1204,7 @@ export default function App() {
           <button
             onClick={() => {
               dismissedTrackIdRef.current = '';
-              setViewMode('fullscreen');
+              setVisualMode('fullscreen', true);
             }}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border font-bold text-xs shadow-lg active:scale-95 transition-all cursor-pointer"
             style={{
@@ -1598,6 +1611,34 @@ export default function App() {
                   className="w-full accent-emerald-500 cursor-pointer"
                 />
               </div>
+
+              <div
+                className={`p-4 rounded-2xl border space-y-2 ${!displaySettings.blurBackground ? 'opacity-40 pointer-events-none' : ''}`}
+                style={{
+                  borderColor: 'var(--kairo-border-color, #334155)',
+                  backgroundColor: 'var(--kairo-bg-secondary, #111827)',
+                }}
+              >
+                <div className="flex justify-between text-xs font-bold">
+                  <span>Intensité du flou :</span>
+                  <span className="font-mono">{displaySettings.blurIntensity}px</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="60"
+                  step="2"
+                  disabled={!displaySettings.blurBackground}
+                  value={displaySettings.blurIntensity}
+                  onChange={(e) =>
+                    setDisplaySettings((p) => ({
+                      ...p,
+                      blurIntensity: parseInt(e.target.value, 10),
+                    }))
+                  }
+                  className="w-full accent-emerald-500 cursor-pointer"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1798,9 +1839,105 @@ export default function App() {
                 <option value="#a855f7">Violet cyber (#a855f7)</option>
               </select>
             </div>
+
+            {/* Lignes affichées avant */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold" style={{ color: 'var(--kairo-text-secondary, #94a1b2)' }}>
+                Lignes affichées avant :
+              </label>
+              <select
+                value={displaySettings.lyricsLinesBefore}
+                onChange={(e) => setDisplaySettings((p) => ({ ...p, lyricsLinesBefore: parseInt(e.target.value, 10) }))}
+                className="w-full p-2.5 rounded-xl border text-xs font-bold outline-none"
+                style={{
+                  borderColor: 'var(--kairo-border-color, #334155)',
+                  backgroundColor: 'var(--kairo-bg-primary, #0b0f19)',
+                  color: 'var(--kairo-text-primary, #ffffff)',
+                }}
+              >
+                <option value="-1">Toutes (Défilement complet)</option>
+                <option value="0">0 ligne avant (aucune)</option>
+                <option value="1">1 ligne avant</option>
+                <option value="2">2 lignes avant</option>
+                <option value="3">3 lignes avant</option>
+                <option value="4">4 lignes avant</option>
+                <option value="5">5 lignes avant</option>
+              </select>
+            </div>
+
+            {/* Lignes affichées après */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold" style={{ color: 'var(--kairo-text-secondary, #94a1b2)' }}>
+                Lignes affichées après :
+              </label>
+              <select
+                value={displaySettings.lyricsLinesAfter}
+                onChange={(e) => setDisplaySettings((p) => ({ ...p, lyricsLinesAfter: parseInt(e.target.value, 10) }))}
+                className="w-full p-2.5 rounded-xl border text-xs font-bold outline-none"
+                style={{
+                  borderColor: 'var(--kairo-border-color, #334155)',
+                  backgroundColor: 'var(--kairo-bg-primary, #0b0f19)',
+                  color: 'var(--kairo-text-primary, #ffffff)',
+                }}
+              >
+                <option value="-1">Toutes (Défilement complet)</option>
+                <option value="0">0 ligne après (aucune)</option>
+                <option value="1">1 ligne après</option>
+                <option value="2">2 lignes après</option>
+                <option value="3">3 lignes après</option>
+                <option value="4">4 lignes après</option>
+                <option value="5">5 lignes après</option>
+              </select>
+            </div>
           </div>
 
-          <div className="pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            <button
+              onClick={() => setDisplaySettings((p) => ({ ...p, lyricsUnderline: !p.lyricsUnderline }))}
+              className="flex items-center justify-between p-4 rounded-2xl border text-xs w-full cursor-pointer transition-all"
+              style={{
+                borderColor: 'var(--kairo-border-color, #334155)',
+                backgroundColor: 'var(--kairo-bg-secondary, #111827)',
+              }}
+            >
+              <div>
+                <div className="font-bold">Souligner parole chantée</div>
+                <div className="text-[10px] text-slate-500">Trait de soulignement sous la ligne active</div>
+              </div>
+              <span
+                className="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                style={{
+                  backgroundColor: displaySettings.lyricsUnderline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  color: displaySettings.lyricsUnderline ? 'var(--kairo-accent-primary, #10b981)' : '#64748b',
+                }}
+              >
+                {displaySettings.lyricsUnderline ? 'Activé' : 'Désactivé'}
+              </span>
+            </button>
+
+            <button
+              onClick={() => setDisplaySettings((p) => ({ ...p, lyricsActiveScale: !p.lyricsActiveScale }))}
+              className="flex items-center justify-between p-4 rounded-2xl border text-xs w-full cursor-pointer transition-all"
+              style={{
+                borderColor: 'var(--kairo-border-color, #334155)',
+                backgroundColor: 'var(--kairo-bg-secondary, #111827)',
+              }}
+            >
+              <div>
+                <div className="font-bold">Zoom parole chantée</div>
+                <div className="text-[10px] text-slate-500">Grossissement dynamique de la ligne en cours</div>
+              </div>
+              <span
+                className="px-2.5 py-1 rounded-full text-[10px] font-bold"
+                style={{
+                  backgroundColor: displaySettings.lyricsActiveScale ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255, 255, 255, 0.05)',
+                  color: displaySettings.lyricsActiveScale ? 'var(--kairo-accent-primary, #10b981)' : '#64748b',
+                }}
+              >
+                {displaySettings.lyricsActiveScale ? 'Activé' : 'Désactivé'}
+              </span>
+            </button>
+
             <button
               onClick={() => setDisplaySettings((p) => ({ ...p, lyricsGlow: !p.lyricsGlow }))}
               className="flex items-center justify-between p-4 rounded-2xl border text-xs w-full cursor-pointer transition-all"
@@ -1810,8 +1947,8 @@ export default function App() {
               }}
             >
               <div>
-                <div className="font-bold">Effet halo lumineux (Glow néon)</div>
-                <div className="text-[10px] text-slate-500">Ombre portée lumineuse sur la ligne active en cours de chant</div>
+                <div className="font-bold">Effet halo lumineux</div>
+                <div className="text-[10px] text-slate-500">Ombre lumineuse sur la ligne active</div>
               </div>
               <span
                 className="px-2.5 py-1 rounded-full text-[10px] font-bold"

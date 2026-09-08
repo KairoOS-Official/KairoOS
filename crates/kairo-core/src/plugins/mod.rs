@@ -150,6 +150,7 @@ pub struct PluginManager {
     builtin_running: Arc<Mutex<HashMap<String, bool>>>,
     /// Canaux de shutdown pour services builtin (clé = id du plugin)
     builtin_shutdown_txs: Arc<Mutex<HashMap<String, tokio::sync::oneshot::Sender<()>>>>,
+    remote_event_callback: Arc<Mutex<Option<crate::remote::RemoteEventCallback>>>,
 }
 
 impl PluginManager {
@@ -160,7 +161,13 @@ impl PluginManager {
             processes: Arc::new(Mutex::new(HashMap::new())),
             builtin_running: Arc::new(Mutex::new(HashMap::new())),
             builtin_shutdown_txs: Arc::new(Mutex::new(HashMap::new())),
+            remote_event_callback: Arc::new(Mutex::new(None)),
         }
+    }
+
+    /// Enregistre un callback global recevant les événements du serveur distant (pour Tauri IPC)
+    pub fn set_remote_event_callback(&self, cb: crate::remote::RemoteEventCallback) {
+        *self.remote_event_callback.lock().unwrap() = Some(cb);
     }
 
     /// Chemin vers le fichier `config/plugins.json`
@@ -331,9 +338,11 @@ impl PluginManager {
             match service_type.as_str() {
                 "remote_server" => {
                     if let (Some(db), Some(launcher)) = (&self.db, &self.launcher) {
+                        let cb = self.remote_event_callback.lock().unwrap().clone();
                         let (_handle, shutdown_tx) = crate::remote::start_remote_server_with_shutdown(
                             db.clone(),
                             launcher.clone(),
+                            cb,
                         );
                         self.builtin_shutdown_txs.lock().unwrap().insert(id.to_string(), shutdown_tx);
                     }
