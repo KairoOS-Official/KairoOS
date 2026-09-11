@@ -24,6 +24,7 @@ import {
   Layout,
   FileCode,
   Eye,
+  AlertTriangle,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useTheme } from '../../../hooks';
@@ -139,8 +140,8 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
   themeManager,
   onThemeChange,
 }) => {
-  // Navigation interne : 'grid' = tous les thèmes, 'settings' = réglages du thème, 'store' = en ligne
-  const [viewMode, setViewMode] = useState<'grid' | 'settings' | 'store'>('grid');
+  // Navigation interne : 'grid' = tous les thèmes, 'settings' = réglages du thème, 'store' = en ligne, 'unverified' = non vérifiés
+  const [viewMode, setViewMode] = useState<'grid' | 'settings' | 'store' | 'unverified'>('grid');
 
   // Modals de création de thème et d'édition de code JSON
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -164,6 +165,17 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
   const [communityError, setCommunityError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadSuccessId, setDownloadSuccessId] = useState<string | null>(null);
+
+  // Thèmes non vérifiés & installation GitHub URL
+  const [unverifiedThemes, setUnverifiedThemes] = useState<any[]>([]);
+  const [unverifiedUrl, setUnverifiedUrl] = useState('');
+  const [loadingUnverified, setLoadingUnverified] = useState(false);
+  const [unverifiedError, setUnverifiedError] = useState<string | null>(null);
+  const [analyzingTheme, setAnalyzingTheme] = useState(false);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analyzedTheme, setAnalyzedTheme] = useState<Theme | null>(null);
+  const [applyingThemeId, setApplyingThemeId] = useState<string | null>(null);
+  const [applySuccessId, setApplySuccessId] = useState<string | null>(null);
 
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -356,6 +368,244 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
     }
   };
 
+  // Charger les thèmes non vérifiés depuis GitHub (/unverified)
+  const fetchUnverifiedThemes = async () => {
+    setLoadingUnverified(true);
+    setUnverifiedError(null);
+    try {
+      const res = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-themes/contents/unverified');
+      if (!res.ok) {
+        if (res.status === 404) {
+          setUnverifiedThemes([]);
+          return;
+        }
+        throw new Error(`Dépôt distant introuvable (${res.status})`);
+      }
+      const contents: GitHubContentItem[] = await res.json();
+      if (!Array.isArray(contents)) {
+        setUnverifiedThemes([]);
+        return;
+      }
+
+      const loadedThemes = await Promise.all(
+        contents.map(async (item) => {
+          if (item.type === 'dir') {
+            try {
+              const rawJson = await fetch(
+                `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}/theme.json`
+              );
+              if (rawJson.ok) {
+                const parsed = await rawJson.json();
+                const previewImageName = parsed.preview_image || 'preview.svg';
+                return {
+                  ...parsed,
+                  theme_type: 'unverified',
+                  preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}/${previewImageName}`,
+                  folder_name: item.name,
+                };
+              }
+            } catch {
+              // ignore
+            }
+            return {
+              id: item.name,
+              name: item.name,
+              author: 'Inconnu',
+              version: '1.0.0',
+              description: 'Thème non vérifié',
+              theme_type: 'unverified',
+              preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}/preview.svg`,
+              folder_name: item.name,
+            };
+          } else if (item.name.endsWith('.json')) {
+            try {
+              const rawJson = await fetch(item.download_url || `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}`);
+              if (rawJson.ok) {
+                const parsed = await rawJson.json();
+                return {
+                  ...parsed,
+                  theme_type: 'unverified',
+                  id: parsed.id || item.name.replace('.json', ''),
+                };
+              }
+            } catch {
+              // ignore
+            }
+          }
+          return null;
+        })
+      );
+
+      setUnverifiedThemes(loadedThemes.filter(Boolean));
+    } catch (err: any) {
+      console.warn('[ThemesSection] Erreur chargement thèmes non vérifiés:', err);
+      setUnverifiedThemes([]);
+    } finally {
+      setLoadingUnverified(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'unverified' && unverifiedThemes.length === 0) {
+      fetchUnverifiedThemes();
+    }
+  }, [viewMode]);
+
+  // Analyser un thème GitHub à partir de son URL
+  const handleAnalyzeThemeUrl = async () => {
+    const rawInput = unverifiedUrl.trim();
+    if (!rawInput) {
+      setAnalysisError('Veuillez entrer une URL GitHub valide.');
+      return;
+    }
+
+    setAnalyzingTheme(true);
+    setAnalysisError(null);
+    setAnalyzedTheme(null);
+
+    try {
+      let candidateUrls: string[] = [];
+
+      if (rawInput.endsWith('theme.json') || rawInput.endsWith('.json')) {
+        if (rawInput.includes('github.com') && rawInput.includes('/blob/')) {
+          candidateUrls.push(rawInput.replace('github.com', 'raw.githubusercontent.com').replace('/blob/', '/'));
+        }
+        candidateUrls.push(rawInput);
+      } else {
+        let clean = rawInput.replace(/\/$/, '');
+        clean = clean.replace(/^https?:\/\/github\.com\//, '');
+        const parts = clean.split('/');
+        if (parts.length >= 2) {
+          const owner = parts[0];
+          const repo = parts[1];
+          candidateUrls.push(`https://raw.githubusercontent.com/${owner}/${repo}/main/theme.json`);
+          candidateUrls.push(`https://raw.githubusercontent.com/${owner}/${repo}/master/theme.json`);
+          candidateUrls.push(`https://raw.githubusercontent.com/${owner}/${repo}/main/unverified/theme.json`);
+          candidateUrls.push(`https://api.github.com/repos/${owner}/${repo}/contents/theme.json`);
+        } else {
+          throw new Error("Format d'URL invalide. Spécifiez https://github.com/proprietaire/depot ou un lien raw direct.");
+        }
+      }
+
+      let parsedTheme: any = null;
+      let lastErr = '';
+
+      for (const url of candidateUrls) {
+        try {
+          const res = await fetch(url, { headers: { Accept: 'application/json' } });
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.content && data.encoding === 'base64') {
+              const decoded = atob(data.content.replace(/\s/g, ''));
+              parsedTheme = JSON.parse(decoded);
+              break;
+            } else if (data && (data.colors || data.id || data.name)) {
+              parsedTheme = data;
+              break;
+            }
+          }
+        } catch (e: any) {
+          lastErr = e.message;
+        }
+      }
+
+      if (!parsedTheme) {
+        throw new Error('Fichier theme.json introuvable dans le dépôt spécifié (testé sur main/master).' + (lastErr ? ` Détail: ${lastErr}` : ''));
+      }
+
+      const id = parsedTheme.id || unverifiedUrl.split('/').pop()?.replace(/\.json$/, '').toLowerCase() || 'theme-unverified';
+      const cleanId = id.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+
+      const normalizedTheme: Theme = {
+        id: cleanId,
+        name: parsedTheme.name || cleanId,
+        author: parsedTheme.author || 'Auteur tiers',
+        version: parsedTheme.version || '1.0.0',
+        description: parsedTheme.description || 'Thème non vérifié installé depuis GitHub',
+        layout_type: parsedTheme.layout_type || 'sidebar_grid',
+        theme_type: 'unverified',
+        colors: {
+          bg_primary: parsedTheme.colors?.bg_primary || '#0f172a',
+          bg_secondary: parsedTheme.colors?.bg_secondary || '#1e293b',
+          bg_card: parsedTheme.colors?.bg_card || '#1e293b',
+          sidebar_bg: parsedTheme.colors?.sidebar_bg || '#0f172a',
+          accent_primary: parsedTheme.colors?.accent_primary || '#f43f5e',
+          accent_secondary: parsedTheme.colors?.accent_secondary || '#e11d48',
+          text_primary: parsedTheme.colors?.text_primary || '#f8fafc',
+          text_secondary: parsedTheme.colors?.text_secondary || '#94a3b8',
+          text_muted: parsedTheme.colors?.text_muted || '#64748b',
+          border: parsedTheme.colors?.border || '#334155',
+          success: parsedTheme.colors?.success || '#10b981',
+          warning: parsedTheme.colors?.warning || '#f59e0b',
+          danger: parsedTheme.colors?.danger || '#ef4444',
+          ...parsedTheme.colors,
+        },
+        fonts: parsedTheme.fonts || {
+          primary: 'Outfit, Inter, system-ui, sans-serif',
+          arcade: 'Press Start 2P, monospace',
+          size_base: '14px',
+        },
+        layout: parsedTheme.layout || {
+          card_radius: '16px',
+          sidebar_width: '280px',
+          card_gap: '16px',
+          card_aspect: 'poster',
+          card_glow: 'subtle',
+          scanlines: 'none',
+          card_shadow: 'soft',
+          card_scale: 'dynamic',
+        },
+        assets: parsedTheme.assets || {},
+        custom_css: parsedTheme.custom_css,
+        preview_url: parsedTheme.preview_url,
+        is_active: false,
+      };
+
+      setAnalyzedTheme(normalizedTheme);
+    } catch (err: any) {
+      setAnalysisError(err?.message || 'Erreur lors de l\'analyse du thème GitHub.');
+    } finally {
+      setAnalyzingTheme(false);
+    }
+  };
+
+  // Télécharger/sauvegarder et appliquer un thème non vérifié
+  const handleApplyAnalyzedTheme = async (themeToApply: any) => {
+    setApplyingThemeId(themeToApply.id);
+    try {
+      const payload: Theme = {
+        id: themeToApply.id,
+        name: themeToApply.name || themeToApply.id,
+        author: themeToApply.author || 'Auteur tiers',
+        version: themeToApply.version || '1.0.0',
+        description: themeToApply.description || 'Thème non vérifié',
+        layout_type: themeToApply.layout_type || 'sidebar_grid',
+        theme_type: 'unverified',
+        colors: themeToApply.colors || currentColors,
+        fonts: themeToApply.fonts || currentFonts,
+        layout: themeToApply.layout || currentLayout,
+        assets: themeToApply.assets || {},
+        custom_css: themeToApply.custom_css,
+        preview_url: themeToApply.preview_url,
+        is_active: true,
+      };
+
+      await saveTheme(payload);
+      await reloadThemes();
+      await applyTheme(payload.id);
+      if (onThemeChange) {
+        onThemeChange(payload.id);
+      }
+      setApplySuccessId(themeToApply.id);
+      setTimeout(() => setApplySuccessId(null), 3000);
+    } catch (err: any) {
+      console.error('[ThemesSection] Erreur application thème:', err);
+      setAnalysisError(err?.message || 'Erreur lors de l\'application du thème.');
+    } finally {
+      setApplyingThemeId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Barre de navigation principale Thèmes */}
@@ -396,10 +646,21 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                   backgroundColor: viewMode === 'store' ? 'var(--accent-primary)' : 'transparent',
                   color: viewMode === 'store' ? '#ffffff' : 'var(--text-secondary)',
                 }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
               >
                 <Globe className="w-3.5 h-3.5" />
                 <span>Store & En ligne</span>
+              </button>
+              <button
+                onClick={() => setViewMode('unverified')}
+                style={{
+                  backgroundColor: viewMode === 'unverified' ? 'var(--accent-primary)' : 'transparent',
+                  color: viewMode === 'unverified' ? '#ffffff' : 'var(--text-secondary)',
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                <span>Non Vérifiés</span>
               </button>
             </>
           )}
@@ -578,12 +839,16 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                       </div>
                     )}
 
-                    {/* Badge Mode Code Custom ou Built-in */}
+                    {/* Badge Mode Code Custom ou Built-in ou Non Vérifié */}
                     <div className="absolute top-2 left-2 flex items-center gap-1">
                       {isCodeTheme ? (
                         <span className="px-2 py-0.5 rounded-md text-[9px] font-black tracking-wide bg-emerald-500 text-white shadow-md flex items-center gap-1">
                           <Code className="w-2.5 h-2.5" />
                           <span>CODE VITE/HTML</span>
+                        </span>
+                      ) : t.theme_type === 'unverified' || (t as any).is_unverified ? (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black tracking-wide bg-red-600 text-white shadow-md">
+                          NON VÉRIFIÉ
                         </span>
                       ) : (
                         <span className="px-2 py-0.5 rounded-md text-[9px] font-black tracking-wide bg-purple-600/90 text-white shadow-md">
@@ -1929,6 +2194,395 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* VUE 4 : THÈMES NON VÉRIFIÉS & INSTALLATION PAR URL GITHUB */}
+      {/* ========================================================= */}
+      {viewMode === 'unverified' && (
+        <div className="space-y-6">
+          {/* Bandeau d'avertissement de sécurité */}
+          <div
+            style={{
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              borderColor: 'rgba(239, 68, 68, 0.3)',
+              color: '#ef4444',
+            }}
+            className="flex items-center gap-3 p-4 rounded-2xl border text-xs font-bold shadow-xs"
+          >
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
+            <span>Les thèmes non vérifiés n'ont pas été validés par l'équipe KaïroOS.</span>
+          </div>
+
+          {/* Section 1 : Installation par URL GitHub & Analyse */}
+          <div
+            style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+            className="p-5 rounded-3xl border space-y-4 shadow-xs"
+          >
+            <div>
+              <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
+                Installer un thème par URL GitHub
+              </h3>
+              <p style={{ color: 'var(--text-muted)' }} className="text-[11px] mt-0.5">
+                Collez l'adresse d'un dépôt GitHub ou d'un fichier direct <code className="font-mono">theme.json</code> pour l'analyser et l'appliquer.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-2">
+              <div className="relative flex-1 w-full">
+                <input
+                  type="text"
+                  placeholder="https://github.com/auteur/mon-theme ou lien raw theme.json"
+                  value={unverifiedUrl}
+                  onChange={(e) => setUnverifiedUrl(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAnalyzeThemeUrl();
+                  }}
+                  style={{
+                    backgroundColor: 'var(--bg-card)',
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                  className="w-full pl-3.5 pr-10 py-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-2 focus:ring-red-500/30 transition-all placeholder:text-slate-500"
+                />
+                {unverifiedUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setUnverifiedUrl('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 text-xs cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAnalyzeThemeUrl}
+                disabled={analyzingTheme || !unverifiedUrl.trim()}
+                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-500 transition-all disabled:opacity-50 cursor-pointer shrink-0 shadow-xs"
+              >
+                {analyzingTheme ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Analyse en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Analyser le thème</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {analysisError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium">
+                {analysisError}
+              </div>
+            )}
+
+            {/* Aperçu du thème analysé */}
+            {analyzedTheme && (
+              <div
+                style={{
+                  backgroundColor: 'var(--bg-card)',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                }}
+                className="p-5 rounded-2xl border-2 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200"
+              >
+                <div
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b"
+                  style={{ borderColor: 'var(--border-color)' }}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 style={{ color: 'var(--text-primary)' }} className="text-base font-black">
+                        {analyzedTheme.name}
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
+                        NON VÉRIFIÉ
+                      </span>
+                      <span style={{ color: 'var(--text-muted)' }} className="text-xs font-mono font-bold">
+                        v{analyzedTheme.version}
+                      </span>
+                    </div>
+                    <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                      Par <span className="font-bold text-slate-300">{analyzedTheme.author}</span> • ID : <code className="font-mono">{analyzedTheme.id}</code>
+                    </p>
+                    {analyzedTheme.description && (
+                      <p style={{ color: 'var(--text-secondary)' }} className="text-xs mt-1">
+                        {analyzedTheme.description}
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleApplyAnalyzedTheme(analyzedTheme)}
+                    disabled={applyingThemeId === analyzedTheme.id}
+                    className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-500 shadow-md hover:scale-102 active:scale-98 transition-all cursor-pointer shrink-0"
+                  >
+                    {applySuccessId === analyzedTheme.id ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>Thème Appliqué !</span>
+                      </>
+                    ) : applyingThemeId === analyzedTheme.id ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Application...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        <span>Appliquer ce thème</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {/* Aperçu des couleurs (palette swatches) */}
+                <div className="space-y-2">
+                  <span style={{ color: 'var(--text-muted)' }} className="text-[11px] font-bold uppercase tracking-wider block">
+                    Aperçu des couleurs (Palette)
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                    {[
+                      { label: 'Fond principal', hex: analyzedTheme.colors.bg_primary },
+                      { label: 'Secondaire', hex: analyzedTheme.colors.bg_secondary },
+                      { label: 'Cartes', hex: analyzedTheme.colors.bg_card },
+                      { label: 'Barre latérale', hex: analyzedTheme.colors.sidebar_bg },
+                      { label: 'Accent 1', hex: analyzedTheme.colors.accent_primary },
+                      { label: 'Accent 2', hex: analyzedTheme.colors.accent_secondary },
+                      { label: 'Bordure', hex: analyzedTheme.colors.border },
+                    ].map((c, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          borderColor: 'var(--border-color)',
+                        }}
+                        className="p-2 rounded-xl border flex flex-col items-center gap-1.5 text-center"
+                      >
+                        <div
+                          className="w-6 h-6 rounded-lg border border-black/20 shadow-xs"
+                          style={{ backgroundColor: c.hex }}
+                        />
+                        <span style={{ color: 'var(--text-primary)' }} className="text-[10px] font-bold truncate w-full">
+                          {c.label}
+                        </span>
+                        <span style={{ color: 'var(--text-muted)' }} className="text-[9px] font-mono">
+                          {c.hex}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Aperçu du layout (sidebar_grid, etc.) */}
+                <div className="space-y-2">
+                  <span style={{ color: 'var(--text-muted)' }} className="text-[11px] font-bold uppercase tracking-wider block">
+                    Aperçu du layout
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div
+                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                      className="px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs"
+                    >
+                      <Layout className="w-3.5 h-3.5 text-red-400" />
+                      <span style={{ color: 'var(--text-muted)' }} className="text-[11px]">Type :</span>
+                      <span style={{ color: 'var(--text-primary)' }} className="font-bold">
+                        {analyzedTheme.layout_type || 'sidebar_grid'}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                      className="px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs"
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5 text-amber-400" />
+                      <span style={{ color: 'var(--text-muted)' }} className="text-[11px]">Rayon cartes :</span>
+                      <span style={{ color: 'var(--text-primary)' }} className="font-bold">
+                        {analyzedTheme.layout?.card_radius || '16px'}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                      className="px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs"
+                    >
+                      <Layers className="w-3.5 h-3.5 text-purple-400" />
+                      <span style={{ color: 'var(--text-muted)' }} className="text-[11px]">Barre latérale :</span>
+                      <span style={{ color: 'var(--text-primary)' }} className="font-bold">
+                        {analyzedTheme.layout?.sidebar_width || '280px'}
+                      </span>
+                    </div>
+
+                    <div
+                      style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                      className="px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                      <span style={{ color: 'var(--text-muted)' }} className="text-[11px]">Lueur :</span>
+                      <span style={{ color: 'var(--text-primary)' }} className="font-bold">
+                        {analyzedTheme.layout?.card_glow || 'subtle'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 2 : Catalogue GitHub des thèmes non vérifiés (/unverified) */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
+                  Catalogue Non Vérifié
+                </h3>
+                <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
+                  Thèmes du dépôt communautaire ouvert KaïroOS (/unverified).
+                </p>
+              </div>
+
+              <button
+                onClick={fetchUnverifiedThemes}
+                disabled={loadingUnverified}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+                title="Rafraîchir"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingUnverified ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+
+            {loadingUnverified ? (
+              <div className="p-12 text-center text-xs text-slate-400">
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-red-500" />
+                <span>Interrogation des thèmes non vérifiés...</span>
+              </div>
+            ) : unverifiedError ? (
+              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium">
+                {unverifiedError}
+              </div>
+            ) : unverifiedThemes.length === 0 ? (
+              <div
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                className="p-8 rounded-3xl border text-center space-y-2"
+              >
+                <AlertTriangle className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
+                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
+                  Aucun thème non vérifié dans le catalogue distant
+                </div>
+                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                  Vous pouvez installer n'importe quel thème en collant l'URL de son dépôt GitHub ci-dessus.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {unverifiedThemes.map((item) => {
+                  const isCurrentActive = activeTheme.id === item.id;
+                  const itemColors = item.colors || currentColors;
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        backgroundColor: 'var(--bg-card)',
+                        borderColor: isCurrentActive
+                          ? 'var(--accent-primary)'
+                          : 'rgba(239, 68, 68, 0.3)',
+                      }}
+                      className="p-4 rounded-3xl border-2 flex flex-col justify-between gap-3 transition-all shadow-xs hover:border-red-500/50"
+                    >
+                      {/* Visual preview */}
+                      <div
+                        style={{
+                          backgroundColor: itemColors.bg_primary,
+                          borderColor: itemColors.border,
+                        }}
+                        className="h-28 rounded-2xl border relative overflow-hidden shadow-inner flex items-center justify-center"
+                      >
+                        {item.preview_url ? (
+                          <img
+                            src={item.preview_url}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <Palette className="w-8 h-8 text-red-400" />
+                        )}
+                        <div className="absolute top-2 left-2">
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-md">
+                            NON VÉRIFIÉ
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Info */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h4 style={{ color: 'var(--text-primary)' }} className="text-xs font-black truncate">
+                            {item.name}
+                          </h4>
+                          <span style={{ color: 'var(--text-muted)' }} className="text-[10px] font-mono">
+                            v{item.version || '1.0'}
+                          </span>
+                        </div>
+                        <p style={{ color: 'var(--text-muted)' }} className="text-[10px]">
+                          Par <span className="font-bold text-slate-300">{item.author || 'Inconnu'}</span>
+                        </p>
+                        {item.description && (
+                          <p style={{ color: 'var(--text-secondary)' }} className="text-[11px] line-clamp-2">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Action */}
+                      <div className="flex items-center justify-end pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
+                        {isCurrentActive ? (
+                          <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-500 text-[10px] font-black border border-emerald-500/20">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                            <span>ACTIF</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleApplyAnalyzedTheme(item)}
+                            disabled={applyingThemeId === item.id}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 shadow-xs hover:scale-102 active:scale-98 transition-all cursor-pointer"
+                          >
+                            {applySuccessId === item.id ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                <span>Appliqué !</span>
+                              </>
+                            ) : applyingThemeId === item.id ? (
+                              <>
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                <span>Application...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                <span>Appliquer ce thème</span>
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
