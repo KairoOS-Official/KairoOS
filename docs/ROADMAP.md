@@ -91,3 +91,128 @@ L'objectif de la version 0.2.0 est d'automatiser l'embellissement visuel de la b
   - Minuteur de session par jeton ou par partie (mode monnayeur d'arcade virtuel).
 - [ ] **Support Multilingue Intégral** :
   - Traduction de l'interface en Anglais, Espagnol, Japonais, Allemand et Portugais.
+
+---
+
+## 🌍 Vision Cross-Platform : Portabilité Multi-Systèmes
+
+KaïroOS est structurellement prêt pour la portabilité grâce à l'architecture Tauri 2 et la séparation complète backend/frontend. Voici les étapes pour étendre le support aux autres systèmes d'exploitation.
+
+### 📊 Faisabilité par Plateforme
+
+| Plateforme | Faisabilité | Effort Estimé | Priorité |
+|------------|-------------|---------------|----------|
+| **Windows** | 10/10 | Référence | ✅ Actuel |
+| **Linux** | 7.5/10 | ~2-3 semaines | Haute |
+| **macOS** | 7/10 | ~3-4 semaines | Haute |
+| **Android** | 4/10 | Projet séparé | Moyenne |
+
+### 🔧 Adaptations Requises pour Linux/macOS
+
+#### P0 — Critique (bloquant)
+
+- [ ] **Système de chemins (`kairo-core/src/paths.rs`)** :
+  - Mapper `%APPDATA%` vers `$XDG_CONFIG_HOME/kairo-os` (Linux) ou `~/Library/Application Support/kairo-os` (macOS).
+  - Déjà partiellement géré avec fallback `USERPROFILE`, à étendre.
+
+- [ ] **Remplacement de `windows-sys` (GetAsyncKeyState / SendInput)** :
+  - Utiliser le crate `rdev` (cross-platform) pour le polling clavier global et l'injection de touches.
+  - Alternative : `evdev` + `libxdo` sur Linux, IOKit sur macOS.
+
+- [ ] **Noms d'exécutables émulateurs (`config/emulators.json`)** :
+  - Créer un mapping par OS : `retroarch.exe` → `retroarch` (Linux/macOS).
+  - ~53 occurrences de `.exe` dans le code Rust à conditionner.
+
+#### P1 — Important
+
+- [ ] **Ouverture de dossiers (`src-tauri/src/commands.rs`)** :
+  - Remplacer `explorer` par `xdg-open` (Linux) / `open` (macOS).
+  - 3 commandes `explorer` identifiées.
+
+- [ ] **Gestion ZIP sans PowerShell** :
+  - Remplacer les appels `powershell Compress-Archive` / `Expand-Archive` par les crates Rust `zip` + `reqwest`.
+  - 4 fonctions Tauri command concernées.
+
+- [ ] **Détection Node.js universelle** :
+  - Remplacer `C:\Program Files\nodejs\node.exe` par `std::process::Command::new("node")` ou `which node`.
+
+#### P2 — Secondaire
+
+- [ ] **Scripts de build (`scripts/build-portable.mjs`)** :
+  - Adapter le script pour Linux/macOS (remplacer PowerShell par Bash).
+  - Générer des packages `.deb` / AppImage (Linux) et `.dmg` (macOS).
+
+- [ ] **Configuration émulateurs multi-OS** :
+  - Structurer `emulators.json` avec des profils par plateforme.
+
+### 📱 Stratégie Android
+
+Deux approches possibles :
+
+#### Option A : Tauri Android (expérimental)
+- Tauri 2 supporte Android via WebView natif.
+- Nécessite un adapter JNI pour les plugins natifs.
+- Effort : élevé, mitigé par la maturité du framework.
+
+#### Option B : PWA via kairo-remote (recommandé à court terme)
+- Le plugin `kairo-remote` sert déjà une PWA complète.
+- Suffisant pour le contrôle à distance (lancement, settings, navigation).
+- Pas de support natif pour le lancement de jeux ou le scraping.
+- Effort : faible, déjà fonctionnel.
+
+### 🏗️ Structure du Projet Multi-Cibles
+
+```
+Kairo/
+├── crates/
+│   ├── kairo-core/          # Cœur métier (déjà là, inchangé)
+│   ├── kairo-cli/           # ← NOUVEAU : binaire CLI en ligne de commande
+│   └── kairo-android/       # ← NOUVEAU : JNI bridge (si Option A)
+├── src-tauri/               # Desktop Tauri (déjà là)
+├── src/                     # Frontend React desktop (déjà là)
+├── android/                 # ← NOUVEAU : projet Tauri Android
+├── plugins/                 # Plugins (déjà là)
+├── themes/                  # Thèmes (déjà là)
+├── config/                  # Configuration (déjà là)
+└── Cargo.toml               # Workspace élargi
+```
+
+#### Workspace Cargo.toml cible
+
+```toml
+[workspace]
+members = [
+    "crates/kairo-core",
+    "crates/kairo-cli",
+    "src-tauri",
+]
+```
+
+### 💻 CLI : Binaire Ligne de Commande
+
+Un binaire Rust minimal important `kairo-core` directement, sans aucune dépendance UI.
+
+**Fonctionnalités prévues :**
+
+| Commande | Description |
+|----------|-------------|
+| `kairo-cli list` | Lister tous les jeux de la bibliothèque |
+| `kairo-cli launch <game_id>` | Lancer un jeu via l'émulateur configuré |
+| `kairo-cli scan` | Scanner les dossiers ROMs |
+| `kairo-cli settings` | Afficher/modifier les paramètres |
+| `kairo-cli plugins` | Lister/activer/désactiver les plugins |
+| `kairo-cli themes` | Lister/appliquer les thèmes |
+
+**Avantages :**
+- Intégration dans des scripts et automatisations.
+- Usage sur des serveurs sans interface graphique.
+- Test rapide sans lancer l'interface desktop.
+
+### 📋 Ordre de Mise en Œuvre Recommandé
+
+1. **Phase 0** — Mode Portable par Défaut (préalable à tout)
+2. **Phase 1** — Linux Desktop (effort ciblé, retour rapide)
+3. **Phase 2** — CLI (outil de développement et d'automatisation)
+4. **Phase 3** — macOS Desktop (similarité avec Linux)
+5. **Phase 4** — Android PWA (via kairo-remote existant)
+6. **Phase 5** — Android natif (si demandé, projet séparé)

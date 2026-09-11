@@ -1,6 +1,6 @@
-# 🕹️ KaïroOS — Architecture, État du Projet & Guide Technique (Pour Développeurs & Assistants IA)
+# 🕹️ KaïroOS — Architecture, État du Projet & Guide Technique
 
-> **Document de référence pour le développeur, Claude et les futurs contributeurs.**
+> **Document de référence pour le développeur et les futurs contributeurs.**
 > *Dernière mise à jour : Mode Portable Auto-Scan, Ajout Manuel de ROMs, Scraper 1-Clic Jaquettes & Rescan Paramètres*
 > *Dépôt officiel : [NayrolfRdgs/KairoOS](https://github.com/NayrolfRdgs/KairoOS)*
 

@@ -58,6 +58,7 @@ Pour approfondir le fonctionnement, l'architecture et les guides pratiques, cons
 - 🛠️ **[Guide de Compilation & Commandes Console](docs/BUILDING.md)** : Comment compiler le package portable (`npm run build:portable`), l'installateur Windows, les tests Rust (`cargo test`) et les commandes de développement.
 - 🎨 **[Architecture & Guide des Thèmes](docs/THEMES.md)** : Layouts structurels officiels (`kairo-default`, `kairo-hub`, `kairo-console`), création de thèmes, variables CSS, Community Store et raccourci d'urgence.
 - 🐛 **[Guide de Débogage & Dépannage](docs/DEBUGGING.md)** : Emplacement des logs, diagnostic du lancement des émulateurs, inspection de la base SQLite et raccourcis clavier de secours.
+- 🌍 **[Guide Cross-Platform](docs/CROSS_PLATFORM.md)** : Adaptations pour Linux, macOS, Android et le binaire CLI (dépendances, structure, checklist).
 
 ---
 
@@ -112,6 +113,33 @@ KaïroOS utilise l'exécution en ligne de commande pure pour piloter les meilleu
    ```bash
    npm run tauri dev
    ```
+
+---
+
+## 🌍 Vision Cross-Platform & CLI
+
+KaïroOS est structurellement prêt pour tourner sur d'autres systèmes d'exploitation grâce à l'architecture Tauri 2 et la séparation complète backend/frontend.
+
+| Plateforme | Statut | Effort |
+|------------|--------|--------|
+| **Windows** | ✅ Actuel | Référence |
+| **Linux** | 🔜 Prévu | ~2-3 semaines |
+| **macOS** | 🔜 Prévu | ~3-4 semaines |
+| **CLI** (toutes plateformes) | 🔜 Prévu | ~1 semaine |
+| **Android** (PWA) | 📋 Envisagé | Via `kairo-remote` |
+
+**Pour en savoir plus** : consultez la [Roadmap Cross-Platform](docs/ROADMAP.md#-vision-cross-platform--portabilité-multi-systèmes).
+
+### Binaire CLI
+
+Un binaire `kairo-cli` est prévu pour permettre l'utilisation de KaïroOS en ligne de commande, sans interface graphique :
+
+```bash
+kairo-cli list              # Lister les jeux
+kairo-cli launch smw-snes   # Lancer un jeu
+kairo-cli scan              # Scanner les ROMs
+kairo-cli settings          # Gérer les paramètres
+```
 
 ---
 
