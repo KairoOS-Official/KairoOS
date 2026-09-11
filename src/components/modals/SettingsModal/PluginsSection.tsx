@@ -392,12 +392,17 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
   const handleTogglePlugin = async (p: PluginInfo) => {
     setActionLoadingId(p.id);
     try {
-      if (p.enabled) {
+      const isDisabling = p.enabled;
+      if (isDisabling) {
         await disablePlugin(p.id);
       } else {
         await enablePlugin(p.id);
       }
+      window.dispatchEvent(new CustomEvent('kairo_plugins_changed'));
       await fetchInstalledPlugins();
+      if (isDisabling) {
+        window.location.reload();
+      }
     } catch (err: any) {
       console.error(err);
       if (onNotification) onNotification(err.message || 'Erreur bascule plugin', 'error');
@@ -451,8 +456,10 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
     if (window.confirm(`Êtes-vous sûr de vouloir supprimer définitivement le plugin "${p.name}" ?`)) {
       try {
         await uninstallPlugin(p.id);
+        window.dispatchEvent(new CustomEvent('kairo_plugins_changed'));
         await fetchInstalledPlugins();
         if (onNotification) onNotification(`Plugin ${p.name} supprimé`, 'info');
+        window.location.reload();
       } catch (err: any) {
         if (onNotification) onNotification(err.message || 'Erreur suppression', 'error');
       }
