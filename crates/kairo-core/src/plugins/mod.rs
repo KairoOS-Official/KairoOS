@@ -818,9 +818,16 @@ impl PluginManager {
         let _ = std::fs::remove_dir_all(&staging_dir);
         let _ = std::fs::create_dir_all(&staging_dir);
 
+        // Nettoyer l'URL au cas où c'est un lien d'arborescence GitHub (ex: https://github.com/user/repo/tree/main/subfolder)
+        let mut clean_url = url.trim().trim_end_matches(".git").trim_end_matches('/').to_string();
+        if let Some(pos) = clean_url.find("/tree/") {
+            clean_url = clean_url[..pos].to_string();
+        }
+        let git_clone_url = format!("{}.git", clean_url);
+
         // 1. Tenter un clone avec git s'il est disponible
         let git_status = std::process::Command::new("git")
-            .args(["clone", "--depth", "1", url, staging_dir.to_str().unwrap()])
+            .args(["clone", "--depth", "1", &git_clone_url, staging_dir.to_str().unwrap()])
             .status();
 
         let cloned = match git_status {
@@ -832,7 +839,6 @@ impl PluginManager {
         if !cloned {
             #[cfg(windows)]
             {
-                let clean_url = url.trim().trim_end_matches(".git").trim_end_matches('/');
                 let zip_url_main = format!("{}/archive/refs/heads/main.zip", clean_url);
                 let zip_file = plugins_dir.join("_temp_download.zip");
                 let ps_cmd = format!(
@@ -872,8 +878,17 @@ impl PluginManager {
         let mut found_dir = None;
         for entry in walkdir::WalkDir::new(&staging_dir).into_iter().flatten() {
             if entry.file_name() == "plugin.json" {
-                found_dir = entry.path().parent().map(|p| p.to_path_buf());
-                break;
+                if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&content) {
+                        if val.get("id").and_then(|s| s.as_str()) == Some(plugin_id) {
+                            found_dir = entry.path().parent().map(|p| p.to_path_buf());
+                            break;
+                        }
+                    }
+                }
+                if found_dir.is_none() {
+                    found_dir = entry.path().parent().map(|p| p.to_path_buf());
+                }
             }
         }
 
@@ -882,7 +897,10 @@ impl PluginManager {
         AppPaths::copy_dir_recursive(&src, &target_dir).map_err(|e| e.to_string())?;
         let _ = std::fs::remove_dir_all(&staging_dir);
 
-        self.enable_plugin(plugin_id)?;
+        if let Err(e) = self.enable_plugin(plugin_id) {
+            eprintln!("⚠️ [PluginManager] Plugin '{}' installé mais échec du démarrage: {}", plugin_id, e);
+            AppPaths::log("WARN", &format!("[PluginManager] Plugin '{}' installé mais échec du démarrage: {}", plugin_id, e));
+        }
         Ok(())
     }
 

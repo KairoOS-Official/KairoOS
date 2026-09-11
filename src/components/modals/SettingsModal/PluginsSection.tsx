@@ -97,6 +97,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
   // Modale sandbox d'approbation des permissions
   const [pendingInstallManifest, setPendingInstallManifest] = useState<PluginManifest | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   // Store Store Officiel, Communauté & Non Vérifiés
   const [storePlugins, setStorePlugins] = useState<any[]>([]);
@@ -164,7 +165,8 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                 ...manifest,
                 plugin_type: manifest.plugin_type || manifest.type || type,
                 folder_name: folder.name,
-                git_url: folder.html_url || `https://github.com/KairoOS-Official/kairos-plugins.git`,
+                git_url: 'https://github.com/KairoOS-Official/kairos-plugins.git',
+                _git_url: 'https://github.com/KairoOS-Official/kairos-plugins.git',
                 preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/${type}/${folder.name}/preview.png`,
               };
             }
@@ -256,7 +258,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                         ...m,
                         plugin_type: 'unverified',
                         folder_name: folder.name,
-                        github_url: folder.html_url || `https://github.com/KairoOS-Official/kairos-plugins/tree/main/unverified/${folder.name}`,
+                        github_url: 'https://github.com/KairoOS-Official/kairos-plugins.git',
+                        git_url: 'https://github.com/KairoOS-Official/kairos-plugins.git',
+                        _git_url: 'https://github.com/KairoOS-Official/kairos-plugins.git',
                         stars: 0,
                         owner: 'KairoOS-Official',
                         preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/unverified/${folder.name}/preview.png`,
@@ -476,8 +480,12 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
   const handleConfirmInstall = async () => {
     if (!pendingInstallManifest) return;
     setInstalling(true);
+    setInstallError(null);
     try {
-      const gitUrl = (pendingInstallManifest as any)._git_url;
+      const gitUrl =
+        (pendingInstallManifest as any)._git_url ||
+        (pendingInstallManifest as any).git_url ||
+        (pendingInstallManifest as any).github_url;
       if (gitUrl) {
         await installPluginFromUrl(gitUrl);
       }
@@ -488,7 +496,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
       await fetchInstalledPlugins();
       if (onNotification) onNotification(`Plugin "${pendingInstallManifest.name}" installé avec succès !`, 'success');
     } catch (err: any) {
-      if (onNotification) onNotification(err.message || "Échec de l'installation", 'error');
+      console.error('[handleConfirmInstall] Erreur:', err);
+      setInstallError(err?.message || String(err) || "Échec de l'installation");
+      if (onNotification) onNotification(err?.message || "Échec de l'installation", 'error');
     } finally {
       setInstalling(false);
     }
@@ -925,7 +935,13 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                           </span>
                         ) : (
                           <button
-                            onClick={() => setPendingInstallManifest(item)}
+                            onClick={() => {
+                              setPendingInstallManifest({
+                                ...item,
+                                _git_url: item._git_url || item.git_url || 'https://github.com/KairoOS-Official/kairos-plugins.git',
+                              });
+                              setInstallError(null);
+                            }}
                             style={{
                               backgroundColor: 'var(--accent-primary)',
                               color: '#ffffff',
@@ -1592,6 +1608,14 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                 })
               )}
             </div>
+
+            {/* Erreur éventuelle d'installation */}
+            {installError && (
+              <div className="mx-5 mb-3 p-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-xs text-red-400 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-red-500" />
+                <span>{installError}</span>
+              </div>
+            )}
 
             {/* Actions Consentement */}
             <div
