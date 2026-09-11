@@ -25,6 +25,7 @@ import {
   FileCode,
   Eye,
   AlertTriangle,
+  ShieldAlert,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useTheme } from '../../../hooks';
@@ -846,8 +847,8 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                           <Code className="w-2.5 h-2.5" />
                           <span>CODE VITE/HTML</span>
                         </span>
-                      ) : t.theme_type === 'unverified' || (t as any).is_unverified ? (
-                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black tracking-wide bg-red-600 text-white shadow-md">
+                      ) : t.theme_type === 'unverified' ? (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
                           NON VÉRIFIÉ
                         </span>
                       ) : (
@@ -880,12 +881,19 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                   {/* Infos Thème */}
                   <div className="space-y-1.5 flex-1">
                     <div className="flex items-center justify-between">
-                      <h4
-                        style={{ color: 'var(--text-primary)' }}
-                        className="text-sm font-black truncate"
-                      >
-                        {t.name}
-                      </h4>
+                      <div className="flex items-center gap-2 truncate">
+                        <h4
+                          style={{ color: 'var(--text-primary)' }}
+                          className="text-sm font-black truncate"
+                        >
+                          {t.name}
+                        </h4>
+                        {t.theme_type === 'unverified' && (
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
+                            NON VÉRIFIÉ
+                          </span>
+                        )}
+                      </div>
                       <span
                         style={{ color: 'var(--text-muted)' }}
                         className="text-[10px] font-mono shrink-0"
@@ -2473,7 +2481,7 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                 style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
                 className="p-8 rounded-3xl border text-center space-y-2"
               >
-                <AlertTriangle className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
+                <ShieldAlert className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
                 <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
                   Aucun thème non vérifié dans le catalogue distant
                 </div>

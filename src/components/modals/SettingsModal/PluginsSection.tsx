@@ -498,7 +498,6 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
               {plugins.map((p) => {
                 const isBuiltin = p.plugin_type === 'builtin' || (p as any).type === 'builtin';
                 const isOfficial = p.plugin_type === 'official' || (p as any).type === 'official';
-                const isUnverified = p.plugin_type === 'unverified' || (p as any).type === 'unverified';
 
                 return (
                   <div
@@ -522,19 +521,22 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                             </h4>
 
                             {/* Badge type */}
-                            {isBuiltin ? (
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-purple-600 text-white shadow-2xs">
-                                SYSTÈME
-                              </span>
-                            ) : isOfficial ? (
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-600 text-white shadow-2xs">
-                                OFFICIEL
-                              </span>
-                            ) : isUnverified ? (
+                            {p.plugin_type === 'unverified' && (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
                                 NON VÉRIFIÉ
                               </span>
-                            ) : (
+                            )}
+                            {isBuiltin && (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-purple-600 text-white shadow-2xs">
+                                SYSTÈME
+                              </span>
+                            )}
+                            {isOfficial && (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-600 text-white shadow-2xs">
+                                OFFICIEL
+                              </span>
+                            )}
+                            {!isBuiltin && !isOfficial && p.plugin_type !== 'unverified' && (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-500 text-white shadow-2xs">
                                 COMMUNAUTÉ
                               </span>
