@@ -31,7 +31,7 @@ Cette phase initiale a posé l'ensemble des fondations techniques, la séparatio
     - `kairo-hub` : Layout Plein Écran Catégories (sans barre latérale, rayonnages horizontaux par Consoles, Sagas, Modes, Favoris).
     - `kairo-console` : Layout Console TV / Steam Big Picture (Hero showcase avec fanart en fondu, carrousel horizontal centré et barre de raccourcis manette).
   - Raccourci d'urgence : Touche <kbd>Suppr</kbd> / <kbd>Del</kbd> sur clavier réinitialisant instantanément le thème officiel en cas d'incompatibilité.
-  - Sélecteur de thèmes dans les paramètres avec aperçu immédiat et Community Store relié à l'API GitHub (`NayrolfRdgs/KairoOS-themes`).
+  - Sélecteur de thèmes dans les paramètres avec aperçu immédiat et Community Store relié à l'API GitHub (`KairoOS-Official/kairos-themes`).
 
 - [x] **Paramètres Système Avancés (`SettingsModal`)** :
   - Sauvegarde en temps réel (chaque modification est écrite à la volée dans `settings.json`, sans bouton de sauvegarde global risquant d'être oublié).

@@ -99,7 +99,7 @@ Si vous testez un thème expérimental ou personnalisez du code CSS qui provoque
 
 ## 🌐 Publier & Installer via le Community Store
 
-KaïroOS intègre un magasin de thèmes communautaire connecté au dépôt GitHub [`NayrolfRdgs/KairoOS-themes`](https://github.com/NayrolfRdgs/KairoOS-themes).
+KaïroOS intègre un magasin de thèmes communautaire connecté au dépôt GitHub [`KairoOS-Official/kairos-themes`](https://github.com/KairoOS-Official/kairos-themes).
 
 ### Pour télécharger un thème communautaire :
 1. Rendez-vous dans **Paramètres** → **Thèmes & Style**.
@@ -107,7 +107,7 @@ KaïroOS intègre un magasin de thèmes communautaire connecté au dépôt GitHu
 3. Parcourez les thèmes partagés par la communauté et cliquez sur **Télécharger**. L'installation et l'extraction sont instantanées.
 
 ### Pour soumettre votre propre thème :
-1. Forkez le dépôt [KairoOS-themes](https://github.com/NayrolfRdgs/KairoOS-themes).
+1. Forkez le dépôt [kairos-themes](https://github.com/KairoOS-Official/kairos-themes).
 2. Créez un nouveau dossier portant l'ID de votre thème (ex: `vaporwave-deluxe/`).
 3. Placez votre `theme.json` et votre image `preview.svg` (ou `preview.png`).
 4. Ouvrez une Pull Request : une fois fusionnée, votre création apparaîtra automatiquement pour tous les utilisateurs de KaïroOS !
