@@ -289,7 +289,7 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
     setLoadingCommunity(true);
     setCommunityError(null);
     try {
-      const res = await fetch('https://api.github.com/repos/NayrolfRdgs/KairoOS-themes/contents/');
+      const res = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-themes/contents/');
       if (!res.ok) {
         throw new Error(`Dépôt distant introuvable (${res.status})`);
       }
@@ -300,14 +300,14 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
         folders.map(async (folder) => {
           try {
             const rawJson = await fetch(
-              `https://raw.githubusercontent.com/NayrolfRdgs/KairoOS-themes/main/${folder.name}/theme.json`
+              `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/theme.json`
             );
             if (rawJson.ok) {
               const parsed = await rawJson.json();
               const previewImageName = parsed.preview_image || 'preview.svg';
               return {
                 ...parsed,
-                preview_url: `https://raw.githubusercontent.com/NayrolfRdgs/KairoOS-themes/main/${folder.name}/${previewImageName}`,
+                preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/${previewImageName}`,
                 folder_name: folder.name,
               };
             }
@@ -320,7 +320,7 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
             author: 'Communauté',
             version: '1.0.0',
             description: 'Thème communautaire KaïroOS',
-            preview_url: `https://raw.githubusercontent.com/NayrolfRdgs/KairoOS-themes/main/${folder.name}/preview.svg`,
+            preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/preview.svg`,
             folder_name: folder.name,
           };
         })
@@ -344,7 +344,7 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
   const handleDownload = async (item: any) => {
     setDownloadingId(item.id);
     try {
-      const zipUrl = `https://github.com/NayrolfRdgs/KairoOS-themes/archive/refs/heads/main.zip`;
+      const zipUrl = `https://github.com/KairoOS-Official/kairos-themes/archive/refs/heads/main.zip`;
       await downloadCommunityTheme(item.id, zipUrl);
       await reloadThemes();
       setDownloadSuccessId(item.id);
@@ -1850,7 +1850,7 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
               <span>
                 Thèmes proposés par la communauté sur{' '}
                 <a
-                  href="https://github.com/NayrolfRdgs/KairoOS-themes"
+                  href="https://github.com/KairoOS-Official/kairos-themes"
                   target="_blank"
                   rel="noreferrer"
                   className="font-bold text-purple-700 underline inline-flex items-center gap-0.5"

@@ -126,7 +126,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
     try {
       setLoadingStore(true);
       setStoreError(null);
-      const res = await fetch(`https://api.github.com/repos/NayrolfRdgs/KairoOS-plugins/contents/${type}`);
+      const res = await fetch(`https://api.github.com/repos/KairoOS-Official/kairos-plugins/contents/${type}`);
       if (!res.ok) {
         throw new Error('Dépôt inaccessible ou aucun plugin disponible.');
       }
@@ -137,14 +137,14 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
         dirs.map(async (folder: any) => {
           try {
             const rawJson = await fetch(
-              `https://raw.githubusercontent.com/NayrolfRdgs/KairoOS-plugins/main/${type}/${folder.name}/plugin.json`
+              `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/${type}/${folder.name}/plugin.json`
             );
             if (rawJson.ok) {
               const manifest = await rawJson.json();
               return {
                 ...manifest,
                 folder_name: folder.name,
-                preview_url: `https://raw.githubusercontent.com/NayrolfRdgs/KairoOS-plugins/main/${type}/${folder.name}/preview.png`,
+                preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/${type}/${folder.name}/preview.png`,
               };
             }
           } catch {
@@ -594,7 +594,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
 
             {activeTab === 'community' && (
               <a
-                href="https://github.com/NayrolfRdgs/KairoOS-plugins#soumettre-un-plugin"
+                href="https://github.com/KairoOS-Official/kairos-plugins#soumettre-un-plugin"
                 target="_blank"
                 rel="noreferrer"
                 style={{
