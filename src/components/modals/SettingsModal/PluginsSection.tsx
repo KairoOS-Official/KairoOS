@@ -21,6 +21,8 @@ import {
   EyeOff,
   AlertTriangle,
   Sparkles,
+  Star,
+  Search,
 } from 'lucide-react';
 import { PluginInfo, PluginDetail, PluginManifest } from '../../../types';
 import {
@@ -102,8 +104,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
   const [loadingStore, setLoadingStore] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
 
-  // Saisie URL GitHub pour plugins non vérifiés
+  // Saisie URL GitHub & recherche pour plugins non vérifiés
   const [githubUrl, setGithubUrl] = useState<string>('');
+  const [unverifiedSearchQuery, setUnverifiedSearchQuery] = useState<string>('');
   const [analyzingUrl, setAnalyzingUrl] = useState<boolean>(false);
   const [urlError, setUrlError] = useState<string | null>(null);
   const [analyzedManifest, setAnalyzedManifest] = useState<PluginManifest | null>(null);
@@ -181,56 +184,127 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
     }
   };
 
-  const fetchUnverifiedPlugins = async () => {
+  const fetchUnverifiedFromTopics = async () => {
     try {
       setLoadingStore(true);
       setStoreError(null);
-      const res = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-plugins/contents/unverified');
+      const res = await fetch(
+        'https://api.github.com/search/repositories?q=topic:kairo-plugins&sort=stars&per_page=20'
+      );
+      if (res.status === 403 || res.status === 429) {
+        throw new Error('Trop de requêtes, réessayez dans 1 minute');
+      }
       if (!res.ok) {
-        if (res.status === 404) {
-          setUnverifiedPlugins([]);
-          return;
-        }
-        throw new Error('Dépôt inaccessible ou aucun plugin non vérifié disponible.');
+        throw new Error(`Erreur GitHub API (${res.status})`);
       }
-      const contents = await res.json();
-      if (!Array.isArray(contents)) {
-        setUnverifiedPlugins([]);
-        return;
-      }
-      const dirs = contents.filter((item: any) => item.type === 'dir');
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
 
       const loaded = await Promise.all(
-        dirs.map(async (folder: any) => {
-          try {
-            const rawJson = await fetch(
-              `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/unverified/${folder.name}/plugin.json`
-            );
-            if (rawJson.ok) {
-              const manifest = await rawJson.json();
-              return {
-                ...manifest,
-                plugin_type: 'unverified',
-                folder_name: folder.name,
-                git_url: folder.html_url || `https://github.com/KairoOS-Official/kairos-plugins.git`,
-                preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/unverified/${folder.name}/preview.png`,
-              };
+        items.map(async (repo: any) => {
+          let manifest: any = null;
+          for (const branch of ['main', 'master']) {
+            try {
+              const rawJson = await fetch(
+                `https://raw.githubusercontent.com/${repo.full_name}/${branch}/plugin.json`
+              );
+              if (rawJson.ok) {
+                manifest = await rawJson.json();
+                break;
+              }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
+          }
+
+          if (manifest) {
+            return {
+              ...manifest,
+              id: manifest.id || repo.name,
+              name: manifest.name || repo.name,
+              author: manifest.author || repo.owner?.login || 'Auteur tiers',
+              description: manifest.description || repo.description || 'Plugin communautaire KaïroOS',
+              plugin_type: 'unverified',
+              github_url: repo.html_url,
+              stars: repo.stargazers_count ?? 0,
+              owner: repo.owner?.login,
+              preview_url: `https://raw.githubusercontent.com/${repo.full_name}/main/preview.png`,
+            };
           }
           return null;
         })
       );
 
-      setUnverifiedPlugins(loaded.filter(Boolean));
+      // Compléter également avec les plugins du dossier /unverified du store officiel s'il y en a
+      let catalogPlugins: any[] = [];
+      try {
+        const catRes = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-plugins/contents/unverified');
+        if (catRes.ok) {
+          const catContents = await catRes.json();
+          if (Array.isArray(catContents)) {
+            const dirs = catContents.filter((item: any) => item.type === 'dir');
+            catalogPlugins = (
+              await Promise.all(
+                dirs.map(async (folder: any) => {
+                  try {
+                    const raw = await fetch(
+                      `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/unverified/${folder.name}/plugin.json`
+                    );
+                    if (raw.ok) {
+                      const m = await raw.json();
+                      return {
+                        ...m,
+                        plugin_type: 'unverified',
+                        folder_name: folder.name,
+                        github_url: folder.html_url || `https://github.com/KairoOS-Official/kairos-plugins/tree/main/unverified/${folder.name}`,
+                        stars: 0,
+                        owner: 'KairoOS-Official',
+                        preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/unverified/${folder.name}/preview.png`,
+                      };
+                    }
+                  } catch {}
+                  return null;
+                })
+              )
+            ).filter(Boolean);
+          }
+        }
+      } catch {}
+
+      const allUnverified = [...loaded.filter(Boolean), ...catalogPlugins];
+      const seen = new Set<string>();
+      const unique = allUnverified.filter((p) => {
+        if (!p || seen.has(p.id)) return false;
+        seen.add(p.id);
+        return true;
+      });
+
+      setUnverifiedPlugins(unique);
     } catch (err: any) {
-      setStoreError(err?.message || 'Impossible de joindre le catalogue de plugins non vérifiés.');
+      if (err?.message?.includes('rate limit') || err?.message?.includes('Trop de requêtes')) {
+        setStoreError('Trop de requêtes, réessayez dans 1 minute');
+      } else {
+        setStoreError(err?.message || 'Impossible de charger les dépôts GitHub par topic.');
+      }
       setUnverifiedPlugins([]);
     } finally {
       setLoadingStore(false);
     }
   };
+
+  const fetchUnverifiedPlugins = fetchUnverifiedFromTopics;
+
+  const filteredUnverifiedPlugins = unverifiedPlugins.filter((item) => {
+    if (!unverifiedSearchQuery.trim()) return true;
+    const q = unverifiedSearchQuery.toLowerCase();
+    return (
+      item.name?.toLowerCase().includes(q) ||
+      item.id?.toLowerCase().includes(q) ||
+      item.description?.toLowerCase().includes(q) ||
+      item.author?.toLowerCase().includes(q) ||
+      item.owner?.toLowerCase().includes(q)
+    );
+  });
 
   useEffect(() => {
     if (activeTab === 'official' || activeTab === 'community') {
@@ -916,7 +990,208 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
             </div>
           </div>
 
-          {/* Section 1 : Installation par URL de dépôt GitHub */}
+          {/* Section 1 : Découvrir des plugins (GitHub Topics) */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Découvrir des plugins populaires</span>
+                </h3>
+                <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
+                  Dépôts GitHub avec le topic <code className="font-mono text-red-400">kairo-plugins</code> triés par étoiles.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={unverifiedSearchQuery}
+                    onChange={(e) => setUnverifiedSearchQuery(e.target.value)}
+                    placeholder="Filtrer les plugins..."
+                    style={{
+                      backgroundColor: 'var(--bg-secondary)',
+                      borderColor: 'var(--border-color)',
+                      color: 'var(--text-primary)',
+                    }}
+                    className="pl-8 pr-3 py-1.5 text-xs rounded-xl border focus:outline-none focus:border-red-500/60 transition-all placeholder:text-slate-500 w-44 sm:w-56"
+                  />
+                  {unverifiedSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setUnverifiedSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchUnverifiedPlugins}
+                  disabled={loadingStore}
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-secondary)',
+                  }}
+                  className="p-2 rounded-xl border hover:text-white transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                  title="Rafraîchir la liste GitHub"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingStore ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {loadingStore ? (
+              <div className="p-12 text-center text-xs text-slate-400">
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-red-500" />
+                <span>Interrogation des dépôts GitHub (topic:kairo-plugins)...</span>
+              </div>
+            ) : storeError ? (
+              <div
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                className="p-8 rounded-3xl border text-center space-y-2"
+              >
+                <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" />
+                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
+                  {storeError}
+                </div>
+                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                  {storeError.includes('Trop de requêtes')
+                    ? 'Le quota de requêtes non authentifiées de GitHub a été atteint. Patientez un instant.'
+                    : 'Vérifiez votre connexion Internet ou installez directement par URL ci-dessous.'}
+                </p>
+              </div>
+            ) : filteredUnverifiedPlugins.length === 0 ? (
+              <div
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                className="p-8 rounded-3xl border text-center space-y-2"
+              >
+                <Puzzle className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
+                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
+                  {unverifiedSearchQuery ? 'Aucun résultat pour cette recherche' : 'Aucun plugin trouvé avec le topic kairo-plugins'}
+                </div>
+                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                  Vous pouvez ajouter le topic <code>kairo-plugins</code> à votre dépôt GitHub ou coller son URL ci-dessous.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredUnverifiedPlugins.map((item) => {
+                  const isInstalled = plugins.some((p) => p.id === item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        backgroundColor: 'var(--bg-card)',
+                        borderColor: 'rgba(239, 68, 68, 0.3)',
+                      }}
+                      className="p-5 rounded-3xl border-2 flex flex-col justify-between gap-4 transition-all shadow-xs hover:border-red-500/50"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 style={{ color: 'var(--text-primary)' }} className="text-sm font-black truncate">
+                                {item.name}
+                              </h4>
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
+                                NON VÉRIFIÉ
+                              </span>
+                              <span style={{ color: 'var(--text-muted)' }} className="text-[10px] font-mono font-bold">
+                                v{item.version || '1.0.0'}
+                              </span>
+                              {item.stars !== undefined && (
+                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                                  <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                                  <span>{item.stars}</span>
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ color: 'var(--text-muted)' }} className="text-[11px] mt-0.5">
+                              Par {item.author || item.owner}
+                            </div>
+                          </div>
+
+                          {isInstalled ? (
+                            <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20 shrink-0">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                              <span>INSTALLÉ</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPendingInstallManifest({
+                                  ...item,
+                                  plugin_type: 'unverified',
+                                  _git_url: item.github_url || item.git_url,
+                                });
+                              }}
+                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-500 shadow-xs hover:scale-102 active:scale-98 transition-all cursor-pointer shrink-0"
+                            >
+                              <span>Installer</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <p style={{ color: 'var(--text-secondary)' }} className="text-xs leading-relaxed line-clamp-3">
+                          {item.description}
+                        </p>
+
+                        {item.permissions && item.permissions.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap pt-1">
+                            {item.permissions.map((perm: string) => (
+                              <span
+                                key={perm}
+                                style={{
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  borderColor: 'var(--border-color)',
+                                  color: 'var(--text-secondary)',
+                                }}
+                                className="px-2 py-0.5 rounded-lg border text-[9px] font-mono font-bold"
+                              >
+                                {perm}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.github_url && (
+                          <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                            <a
+                              href={item.github_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Voir le dépôt GitHub</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Séparateur visuel */}
+          <div className="relative flex py-2 items-center">
+            <div className="flex-grow border-t border-slate-700/60" />
+            <span className="flex-shrink mx-4 text-xs font-bold uppercase tracking-wider text-slate-400">
+              Ou installer par URL GitHub
+            </span>
+            <div className="flex-grow border-t border-slate-700/60" />
+          </div>
+
+          {/* Section 2 : Installation par URL de dépôt GitHub */}
           <div
             style={{
               backgroundColor: 'var(--bg-card)',
@@ -1038,7 +1313,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                   {analyzedManifest.description || 'Aucune description fournie.'}
                 </p>
 
-                {/* Permissions demandées (même bac à sable que les autres) */}
+                {/* Permissions demandées */}
                 <div className="pt-2 border-t border-white/5 space-y-2">
                   <div className="text-[10px] font-black uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
                     <Shield className="w-3 h-3" />
@@ -1084,142 +1359,6 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section 2 : Catalogue GitHub des plugins non vérifiés */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
-                  Catalogue Non Vérifié
-                </h3>
-                <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
-                  Dépôt communautaire ouvert de KaïroOS (/unverified).
-                </p>
-              </div>
-
-              <button
-                onClick={fetchUnverifiedPlugins}
-                disabled={loadingStore}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
-                title="Rafraîchir"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loadingStore ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-
-            {loadingStore ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-red-500" />
-                <span>Interrogation des plugins non vérifiés...</span>
-              </div>
-            ) : storeError ? (
-              <div
-                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-                className="p-8 rounded-3xl border text-center space-y-2"
-              >
-                <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" />
-                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
-                  {storeError}
-                </div>
-                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
-                  Vérifiez votre connexion Internet ou réessayez ultérieurement.
-                </p>
-              </div>
-            ) : unverifiedPlugins.length === 0 ? (
-              <div
-                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-                className="p-8 rounded-3xl border text-center space-y-2"
-              >
-                <ShieldAlert className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
-                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
-                  Aucun plugin non vérifié dans le catalogue
-                </div>
-                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
-                  Vous pouvez installer n'importe quel plugin tiers en collant l'URL de son dépôt GitHub ci-dessus.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {unverifiedPlugins.map((item) => {
-                  const isInstalled = plugins.some((p) => p.id === item.id);
-                  return (
-                    <div
-                      key={item.id}
-                      style={{
-                        backgroundColor: 'var(--bg-card)',
-                        borderColor: 'rgba(239, 68, 68, 0.3)',
-                      }}
-                      className="p-5 rounded-3xl border-2 flex flex-col justify-between gap-4 transition-all shadow-xs hover:border-red-500/50"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 style={{ color: 'var(--text-primary)' }} className="text-sm font-black truncate">
-                                {item.name}
-                              </h4>
-                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
-                                NON VÉRIFIÉ
-                              </span>
-                              <span style={{ color: 'var(--text-muted)' }} className="text-[10px] font-mono font-bold">
-                                v{item.version}
-                              </span>
-                            </div>
-                            <div style={{ color: 'var(--text-muted)' }} className="text-[11px]">
-                              Par {item.author}
-                            </div>
-                          </div>
-
-                          {isInstalled ? (
-                            <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20">
-                              <Check className="w-3 h-3 stroke-[3]" />
-                              <span>INSTALLÉ</span>
-                            </span>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setPendingInstallManifest({
-                                  ...item,
-                                  plugin_type: 'unverified',
-                                  _git_url: item.git_url,
-                                });
-                              }}
-                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-500 shadow-xs hover:scale-102 active:scale-98 transition-all cursor-pointer"
-                            >
-                              <span>Installer</span>
-                            </button>
-                          )}
-                        </div>
-
-                        <p style={{ color: 'var(--text-secondary)' }} className="text-xs leading-relaxed line-clamp-3">
-                          {item.description}
-                        </p>
-
-                        {item.permissions && item.permissions.length > 0 && (
-                          <div className="flex items-center gap-1 flex-wrap pt-1">
-                            {item.permissions.map((perm: string) => (
-                              <span
-                                key={perm}
-                                style={{
-                                  backgroundColor: 'var(--bg-secondary)',
-                                  borderColor: 'var(--border-color)',
-                                  color: 'var(--text-secondary)',
-                                }}
-                                className="px-2 py-0.5 rounded-lg border text-[9px] font-mono font-bold"
-                              >
-                                {perm}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             )}
           </div>

@@ -26,6 +26,8 @@ import {
   Eye,
   AlertTriangle,
   ShieldAlert,
+  Star,
+  Search,
 } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { useTheme } from '../../../hooks';
@@ -170,6 +172,7 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
   // Thèmes non vérifiés & installation GitHub URL
   const [unverifiedThemes, setUnverifiedThemes] = useState<any[]>([]);
   const [unverifiedUrl, setUnverifiedUrl] = useState('');
+  const [unverifiedSearchQuery, setUnverifiedSearchQuery] = useState('');
   const [loadingUnverified, setLoadingUnverified] = useState(false);
   const [unverifiedError, setUnverifiedError] = useState<string | null>(null);
   const [analyzingTheme, setAnalyzingTheme] = useState(false);
@@ -444,20 +447,100 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
     }
   };
 
-  // Charger les thèmes non vérifiés depuis GitHub (/unverified)
-  const fetchUnverifiedThemes = async () => {
+  // Charger les thèmes non vérifiés via l'API GitHub Search par topic:kairo-themes
+  const fetchUnverifiedFromTopics = async () => {
     setLoadingUnverified(true);
     setUnverifiedError(null);
     try {
-      const themes = await fetchThemesFromCategory('unverified');
-      setUnverifiedThemes(themes);
+      const res = await fetch(
+        'https://api.github.com/search/repositories?q=topic:kairo-themes&sort=stars&per_page=20'
+      );
+      if (res.status === 403 || res.status === 429) {
+        throw new Error('Trop de requêtes, réessayez dans 1 minute');
+      }
+      if (!res.ok) {
+        throw new Error(`Erreur GitHub API (${res.status})`);
+      }
+      const data = await res.json();
+      const items = Array.isArray(data.items) ? data.items : [];
+
+      const loaded = await Promise.all(
+        items.map(async (repo: any) => {
+          let manifest: any = null;
+          for (const branch of ['main', 'master']) {
+            try {
+              const rawJson = await fetch(
+                `https://raw.githubusercontent.com/${repo.full_name}/${branch}/theme.json`
+              );
+              if (rawJson.ok) {
+                manifest = await rawJson.json();
+                break;
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          if (manifest) {
+            const previewImageName = manifest.preview_image || 'preview.svg';
+            return {
+              ...manifest,
+              id: manifest.id || repo.name,
+              name: manifest.name || repo.name,
+              author: manifest.author || repo.owner?.login || 'Auteur tiers',
+              description: manifest.description || repo.description || 'Thème communautaire KaïroOS',
+              theme_type: 'unverified',
+              github_url: repo.html_url,
+              stars: repo.stargazers_count ?? 0,
+              owner: repo.owner?.login,
+              preview_url: `https://raw.githubusercontent.com/${repo.full_name}/main/${previewImageName}`,
+              fallback_preview_url: `https://raw.githubusercontent.com/${repo.full_name}/main/preview.png`,
+            };
+          }
+          return null;
+        })
+      );
+
+      // Thèmes du dossier /unverified officiel
+      let catalogThemes: any[] = [];
+      try {
+        catalogThemes = await fetchThemesFromCategory('unverified');
+      } catch {}
+
+      const allUnverified = [...loaded.filter(Boolean), ...catalogThemes];
+      const seen = new Set<string>();
+      const unique = allUnverified.filter((t) => {
+        if (!t || seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      });
+
+      setUnverifiedThemes(unique);
     } catch (err: any) {
-      console.warn('[ThemesSection] Erreur chargement thèmes non vérifiés:', err);
+      if (err?.message?.includes('rate limit') || err?.message?.includes('Trop de requêtes')) {
+        setUnverifiedError('Trop de requêtes, réessayez dans 1 minute');
+      } else {
+        setUnverifiedError(err?.message || 'Impossible de charger les thèmes GitHub par topic.');
+      }
       setUnverifiedThemes([]);
     } finally {
       setLoadingUnverified(false);
     }
   };
+
+  const fetchUnverifiedThemes = fetchUnverifiedFromTopics;
+
+  const filteredUnverifiedThemes = unverifiedThemes.filter((item) => {
+    if (!unverifiedSearchQuery.trim()) return true;
+    const q = unverifiedSearchQuery.toLowerCase();
+    return (
+      item.name?.toLowerCase().includes(q) ||
+      item.id?.toLowerCase().includes(q) ||
+      item.description?.toLowerCase().includes(q) ||
+      item.author?.toLowerCase().includes(q) ||
+      item.owner?.toLowerCase().includes(q)
+    );
+  });
 
   useEffect(() => {
     if (viewMode === 'unverified' && unverifiedThemes.length === 0) {
@@ -2262,20 +2345,250 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
             className="flex items-center gap-3 p-4 rounded-2xl border text-xs font-bold shadow-xs"
           >
             <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
-            <span>Les thèmes non vérifiés n'ont pas été validés par l'équipe KaïroOS.</span>
+            <span>Les thèmes non vérifiés n'ont pas été validés par l'équipe KaïroOS. Installez-les uniquement si vous faites confiance à l'auteur.</span>
           </div>
 
-          {/* Section 1 : Installation par URL GitHub & Analyse */}
+          {/* Section 1 : Découvrir des thèmes populaires (GitHub Topics) */}
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Découvrir des thèmes populaires</span>
+                </h3>
+                <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
+                  Dépôts GitHub avec le topic <code className="font-mono text-red-400">kairo-themes</code> triés par étoiles.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={unverifiedSearchQuery}
+                    onChange={(e) => setUnverifiedSearchQuery(e.target.value)}
+                    placeholder="Filtrer les thèmes..."
+                    style={{
+                      backgroundColor: 'var(--bg-secondary)',
+                      borderColor: 'var(--border-color)',
+                      color: 'var(--text-primary)',
+                    }}
+                    className="pl-8 pr-3 py-1.5 text-xs rounded-xl border focus:outline-none focus:border-red-500/60 transition-all placeholder:text-slate-500 w-44 sm:w-56"
+                  />
+                  {unverifiedSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setUnverifiedSearchQuery('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={fetchUnverifiedThemes}
+                  disabled={loadingUnverified}
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderColor: 'var(--border-color)',
+                    color: 'var(--text-secondary)',
+                  }}
+                  className="p-2 rounded-xl border hover:text-white transition-all cursor-pointer disabled:opacity-50 shrink-0"
+                  title="Rafraîchir la liste GitHub"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingUnverified ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+
+            {loadingUnverified ? (
+              <div className="p-12 text-center text-xs text-slate-400">
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-red-500" />
+                <span>Interrogation des dépôts GitHub (topic:kairo-themes)...</span>
+              </div>
+            ) : unverifiedError ? (
+              <div
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                className="p-8 rounded-3xl border text-center space-y-2"
+              >
+                <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" />
+                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
+                  {unverifiedError}
+                </div>
+                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                  {unverifiedError.includes('Trop de requêtes')
+                    ? 'Le quota de requêtes non authentifiées de GitHub a été atteint. Patientez un instant.'
+                    : 'Vérifiez votre connexion Internet ou installez directement par URL ci-dessous.'}
+                </p>
+              </div>
+            ) : filteredUnverifiedThemes.length === 0 ? (
+              <div
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                className="p-8 rounded-3xl border text-center space-y-2"
+              >
+                <Palette className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
+                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
+                  {unverifiedSearchQuery ? 'Aucun résultat pour cette recherche' : 'Aucun thème trouvé avec le topic kairo-themes'}
+                </div>
+                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                  Vous pouvez ajouter le topic <code>kairo-themes</code> à votre dépôt GitHub ou coller son URL ci-dessous.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {filteredUnverifiedThemes.map((item) => {
+                  const isCurrentActive = activeTheme.id === item.id;
+                  const itemColors = item.colors || currentColors;
+
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        backgroundColor: 'var(--bg-card)',
+                        borderColor: isCurrentActive
+                          ? 'var(--accent-primary)'
+                          : 'rgba(239, 68, 68, 0.3)',
+                      }}
+                      className="p-4 rounded-3xl border-2 flex flex-col justify-between gap-3 transition-all shadow-xs hover:border-red-500/50"
+                    >
+                      {/* Visual preview */}
+                      <div
+                        style={{
+                          backgroundColor: itemColors.bg_primary,
+                          borderColor: itemColors.border,
+                        }}
+                        className="h-28 rounded-2xl border relative overflow-hidden shadow-inner flex items-center justify-center"
+                      >
+                        {item.preview_url ? (
+                          <img
+                            src={item.preview_url}
+                            alt={item.name}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              const target = e.currentTarget as HTMLImageElement;
+                              if (item.fallback_preview_url && target.src !== item.fallback_preview_url) {
+                                target.src = item.fallback_preview_url;
+                              } else {
+                                target.style.display = 'none';
+                              }
+                            }}
+                          />
+                        ) : (
+                          <Palette className="w-8 h-8 text-red-400" />
+                        )}
+                        <div className="absolute top-2 left-2">
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-md">
+                            NON VÉRIFIÉ
+                          </span>
+                        </div>
+                        {item.stars !== undefined && (
+                          <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-black/60 text-amber-400 border border-amber-500/30 backdrop-blur-xs">
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            <span>{item.stars}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Info */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <h4 style={{ color: 'var(--text-primary)' }} className="text-xs font-black truncate">
+                            {item.name}
+                          </h4>
+                          <span style={{ color: 'var(--text-muted)' }} className="text-[10px] font-mono">
+                            v{item.version || '1.0'}
+                          </span>
+                        </div>
+                        <p style={{ color: 'var(--text-muted)' }} className="text-[10px]">
+                          Par <span className="font-bold text-slate-300">{item.author || item.owner || 'Inconnu'}</span>
+                        </p>
+                        {item.description && (
+                          <p style={{ color: 'var(--text-secondary)' }} className="text-[11px] line-clamp-2">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Action & Link */}
+                      <div className="space-y-2 pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
+                        <div className="flex items-center justify-end">
+                          {isCurrentActive ? (
+                            <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-500 text-[10px] font-black border border-emerald-500/20">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                              <span>ACTIF</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleApplyAnalyzedTheme(item)}
+                              disabled={applyingThemeId === item.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 shadow-xs hover:scale-102 active:scale-98 transition-all cursor-pointer"
+                            >
+                              {applySuccessId === item.id ? (
+                                <>
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                  <span>Appliqué !</span>
+                                </>
+                              ) : applyingThemeId === item.id ? (
+                                <>
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                  <span>Application...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                  <span>Appliquer ce thème</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+                        </div>
+
+                        {item.github_url && (
+                          <div className="pt-1 flex items-center justify-between">
+                            <a
+                              href={item.github_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-white transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              <span>Voir le dépôt GitHub</span>
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Séparateur visuel */}
+          <div className="relative flex py-2 items-center">
+            <div className="flex-grow border-t border-slate-700/60" />
+            <span className="flex-shrink mx-4 text-xs font-bold uppercase tracking-wider text-slate-400">
+              Ou installer par URL GitHub
+            </span>
+            <div className="flex-grow border-t border-slate-700/60" />
+          </div>
+
+          {/* Section 2 : Installation par URL GitHub & Analyse */}
           <div
             style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
             className="p-5 rounded-3xl border space-y-4 shadow-xs"
           >
             <div>
-              <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
-                Installer un thème par URL GitHub
+              <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+                <span>Installer un thème par URL GitHub</span>
               </h3>
               <p style={{ color: 'var(--text-muted)' }} className="text-[11px] mt-0.5">
-                Collez l'adresse d'un dépôt GitHub ou d'un fichier direct <code className="font-mono">theme.json</code> pour l'analyser et l'appliquer.
+                Collez l'adresse d'un dépôt GitHub public ou d'un fichier direct <code className="font-mono text-red-400">theme.json</code> pour l'analyser et l'appliquer.
               </p>
             </div>
 
@@ -2482,159 +2795,6 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Section 2 : Catalogue GitHub des thèmes non vérifiés (/unverified) */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
-                  Catalogue Non Vérifié
-                </h3>
-                <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
-                  Thèmes du dépôt communautaire ouvert KaïroOS (/unverified).
-                </p>
-              </div>
-
-              <button
-                onClick={fetchUnverifiedThemes}
-                disabled={loadingUnverified}
-                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
-                title="Rafraîchir"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loadingUnverified ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
-
-            {loadingUnverified ? (
-              <div className="p-12 text-center text-xs text-slate-400">
-                <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-red-500" />
-                <span>Interrogation des thèmes non vérifiés...</span>
-              </div>
-            ) : unverifiedError ? (
-              <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-medium">
-                {unverifiedError}
-              </div>
-            ) : unverifiedThemes.length === 0 ? (
-              <div
-                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
-                className="p-8 rounded-3xl border text-center space-y-2"
-              >
-                <ShieldAlert className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
-                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
-                  Aucun thème non vérifié dans le catalogue distant
-                </div>
-                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
-                  Vous pouvez installer n'importe quel thème en collant l'URL de son dépôt GitHub ci-dessus.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {unverifiedThemes.map((item) => {
-                  const isCurrentActive = activeTheme.id === item.id;
-                  const itemColors = item.colors || currentColors;
-
-                  return (
-                    <div
-                      key={item.id}
-                      style={{
-                        backgroundColor: 'var(--bg-card)',
-                        borderColor: isCurrentActive
-                          ? 'var(--accent-primary)'
-                          : 'rgba(239, 68, 68, 0.3)',
-                      }}
-                      className="p-4 rounded-3xl border-2 flex flex-col justify-between gap-3 transition-all shadow-xs hover:border-red-500/50"
-                    >
-                      {/* Visual preview */}
-                      <div
-                        style={{
-                          backgroundColor: itemColors.bg_primary,
-                          borderColor: itemColors.border,
-                        }}
-                        className="h-28 rounded-2xl border relative overflow-hidden shadow-inner flex items-center justify-center"
-                      >
-                        {item.preview_url ? (
-                          <img
-                            src={item.preview_url}
-                            alt={item.name}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              const target = e.currentTarget as HTMLImageElement;
-                              if (item.fallback_preview_url && target.src !== item.fallback_preview_url) {
-                                target.src = item.fallback_preview_url;
-                              } else {
-                                target.style.display = 'none';
-                              }
-                            }}
-                          />
-                        ) : (
-                          <Palette className="w-8 h-8 text-red-400" />
-                        )}
-                        <div className="absolute top-2 left-2">
-                          <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-md">
-                            NON VÉRIFIÉ
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Info */}
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <h4 style={{ color: 'var(--text-primary)' }} className="text-xs font-black truncate">
-                            {item.name}
-                          </h4>
-                          <span style={{ color: 'var(--text-muted)' }} className="text-[10px] font-mono">
-                            v{item.version || '1.0'}
-                          </span>
-                        </div>
-                        <p style={{ color: 'var(--text-muted)' }} className="text-[10px]">
-                          Par <span className="font-bold text-slate-300">{item.author || 'Inconnu'}</span>
-                        </p>
-                        {item.description && (
-                          <p style={{ color: 'var(--text-secondary)' }} className="text-[11px] line-clamp-2">
-                            {item.description}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Action */}
-                      <div className="flex items-center justify-end pt-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
-                        {isCurrentActive ? (
-                          <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-500 text-[10px] font-black border border-emerald-500/20">
-                            <Check className="w-3 h-3 stroke-[3]" />
-                            <span>ACTIF</span>
-                          </span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleApplyAnalyzedTheme(item)}
-                            disabled={applyingThemeId === item.id}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-500 shadow-xs hover:scale-102 active:scale-98 transition-all cursor-pointer"
-                          >
-                            {applySuccessId === item.id ? (
-                              <>
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                <span>Appliqué !</span>
-                              </>
-                            ) : applyingThemeId === item.id ? (
-                              <>
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                                <span>Application...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                <span>Appliquer ce thème</span>
-                              </>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
             )}
           </div>
