@@ -21,6 +21,10 @@ export async function installPlugin(zipPath: string): Promise<PluginManifest> {
   return invokeCommand<PluginManifest>('install_plugin', { zipPath });
 }
 
+export async function installPluginFromUrl(url: string): Promise<PluginManifest> {
+  return invokeCommand<PluginManifest>('install_plugin_from_url', { url });
+}
+
 export async function confirmInstallPlugin(pluginId: string): Promise<void> {
   return invokeCommand<void>('confirm_install_plugin', { pluginId });
 }

@@ -29,6 +29,7 @@ import {
   enablePlugin,
   disablePlugin,
   installPlugin,
+  installPluginFromUrl,
   confirmInstallPlugin,
   uninstallPlugin,
   updatePluginSettings,
@@ -80,7 +81,7 @@ const PERMISSION_DESCRIPTIONS: Record<string, { label: string; desc: string; ico
 };
 
 export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, onPluginsChange }) => {
-  const [activeTab, setActiveTab] = useState<'installed' | 'official' | 'community'>('installed');
+  const [activeTab, setActiveTab] = useState<'installed' | 'official' | 'community' | 'unverified'>('installed');
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -95,10 +96,17 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
   const [pendingInstallManifest, setPendingInstallManifest] = useState<PluginManifest | null>(null);
   const [installing, setInstalling] = useState(false);
 
-  // Store Store Officiel & Communauté
+  // Store Store Officiel, Communauté & Non Vérifiés
   const [storePlugins, setStorePlugins] = useState<any[]>([]);
+  const [unverifiedPlugins, setUnverifiedPlugins] = useState<any[]>([]);
   const [loadingStore, setLoadingStore] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
+
+  // Saisie URL GitHub pour plugins non vérifiés
+  const [githubUrl, setGithubUrl] = useState<string>('');
+  const [analyzingUrl, setAnalyzingUrl] = useState<boolean>(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const [analyzedManifest, setAnalyzedManifest] = useState<PluginManifest | null>(null);
 
   // Toast de commande
   const [commandFeedback, setCommandFeedback] = useState<{ id: string; msg: string } | null>(null);
@@ -122,7 +130,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
     fetchInstalledPlugins();
   }, []);
 
-  const fetchStorePlugins = async (type: 'official' | 'community') => {
+  const fetchStorePlugins = async (type: 'official' | 'community' | 'unverified') => {
     try {
       setLoadingStore(true);
       setStoreError(null);
@@ -143,7 +151,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
               const manifest = await rawJson.json();
               return {
                 ...manifest,
+                plugin_type: type === 'unverified' ? 'unverified' : (manifest.plugin_type || manifest.type || type),
                 folder_name: folder.name,
+                git_url: folder.html_url || `https://github.com/KairoOS-Official/kairos-plugins.git`,
                 preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/${type}/${folder.name}/preview.png`,
               };
             }
@@ -154,20 +164,99 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
         })
       );
 
-      setStorePlugins(loaded.filter(Boolean));
+      if (type === 'unverified') {
+        setUnverifiedPlugins(loaded.filter(Boolean));
+      } else {
+        setStorePlugins(loaded.filter(Boolean));
+      }
     } catch (err: any) {
       setStoreError(err?.message || 'Impossible de joindre le catalogue de plugins.');
-      setStorePlugins([]);
+      if (type === 'unverified') {
+        setUnverifiedPlugins([]);
+      } else {
+        setStorePlugins([]);
+      }
     } finally {
       setLoadingStore(false);
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'official' || activeTab === 'community') {
+    if (activeTab === 'official' || activeTab === 'community' || activeTab === 'unverified') {
       fetchStorePlugins(activeTab);
     }
   }, [activeTab]);
+
+  const handleAnalyzeGithubUrl = async () => {
+    const trimmed = githubUrl.trim();
+    if (!trimmed) {
+      setUrlError("Veuillez renseigner l'URL d'un dépôt GitHub.");
+      return;
+    }
+
+    const githubRegex = /^https?:\/\/(?:www\.)?github\.com\/([^\/]+)\/([^\/\?#]+)/i;
+    const match = trimmed.match(githubRegex);
+    if (!match) {
+      setUrlError("Format d'URL invalide. Exemple attendu : https://github.com/auteur/mon-plugin");
+      return;
+    }
+
+    const owner = match[1];
+    const repo = match[2].replace(/\.git$/, '');
+
+    setAnalyzingUrl(true);
+    setUrlError(null);
+    setAnalyzedManifest(null);
+
+    try {
+      let res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/main/plugin.json`);
+      if (!res.ok) {
+        res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/master/plugin.json`);
+      }
+      if (!res.ok) {
+        res = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/plugin.json`);
+        if (res.ok) {
+          const fileData = await res.json();
+          if (fileData.content) {
+            const decoded = atob(fileData.content.replace(/\s/g, ''));
+            const manifest = JSON.parse(decoded);
+            manifest.plugin_type = 'unverified';
+            (manifest as any)._git_url = trimmed;
+            setAnalyzedManifest(manifest);
+            return;
+          }
+        }
+        throw new Error('Fichier plugin.json introuvable à la racine de ce dépôt GitHub.');
+      }
+
+      const manifest = await res.json();
+      manifest.plugin_type = 'unverified';
+      (manifest as any)._git_url = trimmed;
+      setAnalyzedManifest(manifest);
+    } catch (err: any) {
+      setUrlError(err.message || "Impossible d'analyser le dépôt GitHub.");
+    } finally {
+      setAnalyzingUrl(false);
+    }
+  };
+
+  const handleInstallFromAnalyzed = async () => {
+    if (!analyzedManifest) return;
+    const targetUrl = (analyzedManifest as any)._git_url || githubUrl.trim();
+    if (!targetUrl) return;
+
+    setInstalling(true);
+    try {
+      const stagedManifest = await installPluginFromUrl(targetUrl);
+      stagedManifest.type = 'unverified';
+      stagedManifest.plugin_type = 'unverified';
+      setPendingInstallManifest(stagedManifest);
+    } catch (err: any) {
+      if (onNotification) onNotification(err.message || 'Échec du clonage du plugin', 'error');
+    } finally {
+      setInstalling(false);
+    }
+  };
 
   const handleTogglePlugin = async (p: PluginInfo) => {
     setActionLoadingId(p.id);
@@ -261,8 +350,14 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
     if (!pendingInstallManifest) return;
     setInstalling(true);
     try {
+      const gitUrl = (pendingInstallManifest as any)._git_url;
+      if (gitUrl) {
+        await installPluginFromUrl(gitUrl);
+      }
       await confirmInstallPlugin(pendingInstallManifest.id);
       setPendingInstallManifest(null);
+      setAnalyzedManifest(null);
+      setGithubUrl('');
       await fetchInstalledPlugins();
       if (onNotification) onNotification(`Plugin "${pendingInstallManifest.name}" installé avec succès !`, 'success');
     } catch (err: any) {
@@ -279,14 +374,14 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
         style={{ borderColor: 'var(--border-color)' }}
         className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b pb-3"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setActiveTab('installed')}
             style={{
               backgroundColor: activeTab === 'installed' ? 'var(--accent-primary)' : 'transparent',
               color: activeTab === 'installed' ? '#ffffff' : 'var(--text-secondary)',
             }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
           >
             <Puzzle className="w-3.5 h-3.5" />
             <span>Installés ({plugins.length})</span>
@@ -298,7 +393,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
               backgroundColor: activeTab === 'official' ? 'var(--accent-primary)' : 'transparent',
               color: activeTab === 'official' ? '#ffffff' : 'var(--text-secondary)',
             }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
           >
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             <span>Store Officiel</span>
@@ -310,10 +405,22 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
               backgroundColor: activeTab === 'community' ? 'var(--accent-primary)' : 'transparent',
               color: activeTab === 'community' ? '#ffffff' : 'var(--text-secondary)',
             }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
           >
             <Globe className="w-3.5 h-3.5 text-amber-400" />
             <span>Communauté</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('unverified')}
+            style={{
+              backgroundColor: activeTab === 'unverified' ? 'var(--accent-primary)' : 'transparent',
+              color: activeTab === 'unverified' ? '#ffffff' : 'var(--text-secondary)',
+            }}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black transition-all shadow-xs cursor-pointer"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+            <span>Non Vérifiés</span>
           </button>
         </div>
 
@@ -389,8 +496,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {plugins.map((p) => {
-                const isBuiltin = p.plugin_type === 'builtin';
-                const isOfficial = p.plugin_type === 'official';
+                const isBuiltin = p.plugin_type === 'builtin' || (p as any).type === 'builtin';
+                const isOfficial = p.plugin_type === 'official' || (p as any).type === 'official';
+                const isUnverified = p.plugin_type === 'unverified' || (p as any).type === 'unverified';
 
                 return (
                   <div
@@ -421,6 +529,10 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                             ) : isOfficial ? (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-600 text-white shadow-2xs">
                                 OFFICIEL
+                              </span>
+                            ) : isUnverified ? (
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
+                                NON VÉRIFIÉ
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-amber-500 text-white shadow-2xs">
@@ -727,6 +839,324 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* VUE 4 : PLUGINS NON VÉRIFIÉS & INSTALLATION PAR GITHUB    */}
+      {/* ========================================================= */}
+      {activeTab === 'unverified' && (
+        <div className="space-y-6">
+          {/* Bandeau d'avertissement rouge en haut de la vue */}
+          <div className="p-4 rounded-2xl bg-red-500/10 border-2 border-red-500/30 text-red-400 flex items-start gap-3 shadow-xs">
+            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5 text-red-500" />
+            <div className="space-y-0.5">
+              <h4 className="text-xs font-black uppercase tracking-wider text-red-500">
+                Avertissement de Sécurité
+              </h4>
+              <p className="text-xs text-red-300/90 leading-relaxed">
+                Les plugins non vérifiés n'ont pas été validés par l'équipe KaïroOS.
+                Installez-les uniquement si vous faites confiance à l'auteur.
+              </p>
+            </div>
+          </div>
+
+          {/* Section 1 : Installation par URL de dépôt GitHub */}
+          <div
+            style={{
+              backgroundColor: 'var(--bg-card)',
+              borderColor: 'var(--border-color)',
+            }}
+            className="p-5 rounded-3xl border-2 space-y-4 shadow-xs"
+          >
+            <div>
+              <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 text-red-500" />
+                <span>Installer un plugin depuis un dépôt GitHub</span>
+              </h3>
+              <p style={{ color: 'var(--text-muted)' }} className="text-[11px] mt-0.5">
+                Collez l'URL d'un dépôt GitHub public contenant un fichier <code className="font-mono text-red-400">plugin.json</code> à la racine.
+              </p>
+            </div>
+
+            {/* Input URL + Bouton Analyser */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  value={githubUrl}
+                  onChange={(e) => {
+                    setGithubUrl(e.target.value);
+                    setUrlError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleAnalyzeGithubUrl();
+                  }}
+                  placeholder="https://github.com/auteur/mon-plugin-kairo"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    borderColor: urlError ? '#ef4444' : 'var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                  className="w-full px-4 py-2.5 rounded-xl border text-xs font-mono outline-none focus:border-red-500/60 transition-all placeholder:text-slate-500"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAnalyzeGithubUrl}
+                disabled={analyzingUrl || !githubUrl.trim()}
+                style={{
+                  backgroundColor: 'var(--accent-primary)',
+                  color: '#ffffff',
+                }}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black shadow-xs hover:scale-102 active:scale-98 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+              >
+                {analyzingUrl ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Analyse en cours...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Analyser</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {/* Feedback d'erreur d'analyse */}
+            {urlError && (
+              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{urlError}</span>
+              </div>
+            )}
+
+            {/* Carte du plugin analysé avec ses permissions */}
+            {analyzedManifest && (
+              <div
+                style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderColor: 'rgba(239, 68, 68, 0.4)',
+                }}
+                className="p-4 rounded-2xl border-2 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 style={{ color: 'var(--text-primary)' }} className="text-sm font-black">
+                        {analyzedManifest.name}
+                      </h4>
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
+                        NON VÉRIFIÉ
+                      </span>
+                      <span style={{ color: 'var(--text-muted)' }} className="text-[10px] font-mono font-bold">
+                        v{analyzedManifest.version}
+                      </span>
+                    </div>
+                    <div style={{ color: 'var(--text-muted)' }} className="text-[11px] mt-0.5">
+                      Par {analyzedManifest.author}
+                    </div>
+                  </div>
+
+                  {plugins.some((p) => p.id === analyzedManifest.id) ? (
+                    <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20">
+                      <Check className="w-3 h-3 stroke-[3]" />
+                      <span>DÉJÀ INSTALLÉ</span>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleInstallFromAnalyzed}
+                      disabled={installing}
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-500 shadow-md hover:scale-102 active:scale-98 transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {installing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                      <span>Installer (Git Clone)</span>
+                    </button>
+                  )}
+                </div>
+
+                <p style={{ color: 'var(--text-secondary)' }} className="text-xs leading-relaxed">
+                  {analyzedManifest.description || 'Aucune description fournie.'}
+                </p>
+
+                {/* Permissions demandées (même bac à sable que les autres) */}
+                <div className="pt-2 border-t border-white/5 space-y-2">
+                  <div className="text-[10px] font-black uppercase tracking-wider text-amber-500 flex items-center gap-1.5">
+                    <Shield className="w-3 h-3" />
+                    <span>Permissions demandées par ce plugin :</span>
+                  </div>
+
+                  {!analyzedManifest.permissions || analyzedManifest.permissions.length === 0 ? (
+                    <div className="text-xs text-emerald-400 flex items-center gap-1.5 italic">
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>Ce plugin ne demande aucune permission spéciale sur votre système.</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {analyzedManifest.permissions.map((perm) => {
+                        const info = PERMISSION_DESCRIPTIONS[perm] || {
+                          label: perm,
+                          desc: `Permission système: ${perm}`,
+                          icon: <Shield className="w-4 h-4 text-slate-400" />,
+                        };
+                        return (
+                          <div
+                            key={perm}
+                            style={{
+                              backgroundColor: 'var(--bg-card)',
+                              borderColor: 'var(--border-color)',
+                            }}
+                            className="p-2.5 rounded-xl border flex items-start gap-2 text-left"
+                          >
+                            <div className="p-1.5 rounded-lg bg-black/10 shrink-0">
+                              {info.icon}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div style={{ color: 'var(--text-primary)' }} className="text-[11px] font-bold">
+                                {info.label}
+                              </div>
+                              <div style={{ color: 'var(--text-muted)' }} className="text-[10px] line-clamp-1">
+                                {info.desc}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 2 : Catalogue GitHub des plugins non vérifiés */}
+          <div className="space-y-4">
+            <div>
+              <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
+                Catalogue Non Vérifié
+              </h3>
+              <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
+                Dépôt communautaire ouvert de KaïroOS (/unverified).
+              </p>
+            </div>
+
+            {loadingStore ? (
+              <div className="p-12 text-center text-xs text-slate-400">
+                <RefreshCw className="w-6 h-6 mx-auto animate-spin mb-2 text-red-500" />
+                <span>Interrogation des plugins non vérifiés...</span>
+              </div>
+            ) : storeError ? (
+              <div
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                className="p-8 rounded-3xl border text-center space-y-2"
+              >
+                <AlertTriangle className="w-8 h-8 mx-auto text-amber-500" />
+                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
+                  {storeError}
+                </div>
+                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                  Vérifiez votre connexion Internet ou réessayez ultérieurement.
+                </p>
+              </div>
+            ) : unverifiedPlugins.length === 0 ? (
+              <div
+                style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-color)' }}
+                className="p-8 rounded-3xl border text-center space-y-2"
+              >
+                <ShieldAlert className="w-8 h-8 mx-auto text-slate-400 opacity-60" />
+                <div style={{ color: 'var(--text-primary)' }} className="text-sm font-bold">
+                  Aucun plugin non vérifié dans le catalogue
+                </div>
+                <p style={{ color: 'var(--text-muted)' }} className="text-xs">
+                  Vous pouvez installer n'importe quel plugin tiers en collant l'URL de son dépôt GitHub ci-dessus.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {unverifiedPlugins.map((item) => {
+                  const isInstalled = plugins.some((p) => p.id === item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        backgroundColor: 'var(--bg-card)',
+                        borderColor: 'rgba(239, 68, 68, 0.3)',
+                      }}
+                      className="p-5 rounded-3xl border-2 flex flex-col justify-between gap-4 transition-all shadow-xs hover:border-red-500/50"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 style={{ color: 'var(--text-primary)' }} className="text-sm font-black truncate">
+                                {item.name}
+                              </h4>
+                              <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-2xs">
+                                NON VÉRIFIÉ
+                              </span>
+                              <span style={{ color: 'var(--text-muted)' }} className="text-[10px] font-mono font-bold">
+                                v{item.version}
+                              </span>
+                            </div>
+                            <div style={{ color: 'var(--text-muted)' }} className="text-[11px]">
+                              Par {item.author}
+                            </div>
+                          </div>
+
+                          {isInstalled ? (
+                            <span className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-600 text-[10px] font-black border border-emerald-500/20">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                              <span>INSTALLÉ</span>
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPendingInstallManifest({
+                                  ...item,
+                                  plugin_type: 'unverified',
+                                  _git_url: item.git_url,
+                                });
+                              }}
+                              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black text-white bg-red-600 hover:bg-red-500 shadow-xs hover:scale-102 active:scale-98 transition-all cursor-pointer"
+                            >
+                              <span>Installer</span>
+                            </button>
+                          )}
+                        </div>
+
+                        <p style={{ color: 'var(--text-secondary)' }} className="text-xs leading-relaxed line-clamp-3">
+                          {item.description}
+                        </p>
+
+                        {item.permissions && item.permissions.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap pt-1">
+                            {item.permissions.map((perm: string) => (
+                              <span
+                                key={perm}
+                                style={{
+                                  backgroundColor: 'var(--bg-secondary)',
+                                  borderColor: 'var(--border-color)',
+                                  color: 'var(--text-secondary)',
+                                }}
+                                className="px-2 py-0.5 rounded-lg border text-[9px] font-mono font-bold"
+                              >
+                                {perm}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

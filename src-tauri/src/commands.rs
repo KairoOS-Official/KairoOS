@@ -1142,6 +1142,11 @@ pub fn install_plugin(zip_path: String) -> Result<kairo_core::PluginManifest, St
 }
 
 #[tauri::command]
+pub fn install_plugin_from_url(url: String) -> Result<kairo_core::PluginManifest, String> {
+    kairo_core::PluginManager::stage_plugin_git(&url)
+}
+
+#[tauri::command]
 pub fn confirm_install_plugin(plugin_id: String, state: State<'_, AppState>) -> Result<(), String> {
     state.plugin_manager.confirm_install(&plugin_id)
 }

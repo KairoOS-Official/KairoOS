@@ -187,6 +187,7 @@ pub fn run() {
             commands::enable_plugin,
             commands::disable_plugin,
             commands::install_plugin,
+            commands::install_plugin_from_url,
             commands::confirm_install_plugin,
             commands::uninstall_plugin,
             commands::update_plugin_settings,

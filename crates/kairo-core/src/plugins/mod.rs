@@ -16,6 +16,7 @@ pub enum PluginType {
     Builtin,
     Official,
     Community,
+    Unverified,
 }
 
 impl Default for PluginType {
@@ -808,6 +809,58 @@ impl PluginManager {
         }
 
         Err("Aucun fichier plugin.json trouvé dans l'archive".into())
+    }
+
+    /// Clone un dépôt Git de plugin dans un dossier temporaire et lit son manifest
+    pub fn stage_plugin_git(url: &str) -> Result<PluginManifest, String> {
+        let plugins_dir = AppPaths::get_plugins_dir();
+        let staging_dir = plugins_dir.join("_temp_staging");
+        let _ = std::fs::remove_dir_all(&staging_dir);
+        let _ = std::fs::create_dir_all(&staging_dir);
+
+        // 1. Tenter un clone avec git s'il est disponible
+        let git_status = std::process::Command::new("git")
+            .args(["clone", "--depth", "1", url, staging_dir.to_str().unwrap()])
+            .status();
+
+        let cloned = match git_status {
+            Ok(s) if s.success() => true,
+            _ => false,
+        };
+
+        // 2. Si git n'est pas disponible ou échoue, télécharger l'archive zip GitHub via PowerShell
+        if !cloned {
+            #[cfg(windows)]
+            {
+                let clean_url = url.trim().trim_end_matches(".git").trim_end_matches('/');
+                let zip_url_main = format!("{}/archive/refs/heads/main.zip", clean_url);
+                let zip_file = plugins_dir.join("_temp_download.zip");
+                let ps_cmd = format!(
+                    "try {{ Invoke-WebRequest -Uri '{}' -OutFile '{}' -ErrorAction Stop }} catch {{ Invoke-WebRequest -Uri '{}/archive/refs/heads/master.zip' -OutFile '{}' -ErrorAction Stop }}; Expand-Archive -Path '{}' -DestinationPath '{}' -Force; Remove-Item '{}' -Force -ErrorAction SilentlyContinue",
+                    zip_url_main, zip_file.display(), clean_url, zip_file.display(), zip_file.display(), staging_dir.display(), zip_file.display()
+                );
+                let status = std::process::Command::new("powershell")
+                    .args(["-Command", &ps_cmd])
+                    .status()
+                    .map_err(|e| format!("Échec du téléchargement du dépôt: {}", e))?;
+                if !status.success() {
+                    return Err("Échec du clonage Git et du téléchargement de l'archive GitHub".into());
+                }
+            }
+        }
+
+        for entry in walkdir::WalkDir::new(&staging_dir).into_iter().flatten() {
+            if entry.file_name() == "plugin.json" {
+                let content = std::fs::read_to_string(entry.path()).map_err(|e| e.to_string())?;
+                let mut manifest: PluginManifest = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+                if manifest.plugin_type != PluginType::Builtin && manifest.plugin_type != PluginType::Official {
+                    manifest.plugin_type = PluginType::Unverified;
+                }
+                return Ok(manifest);
+            }
+        }
+
+        Err("Aucun fichier plugin.json trouvé dans le dépôt cloné".into())
     }
 
     /// Confirme l'installation du plugin depuis le dossier temporaire

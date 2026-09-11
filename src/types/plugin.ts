@@ -1,4 +1,4 @@
-export type PluginType = 'builtin' | 'official' | 'community';
+export type PluginType = 'builtin' | 'official' | 'community' | 'unverified';
 
 export interface PluginSettingField {
   type: 'string' | 'number' | 'boolean';
@@ -36,6 +36,7 @@ export interface PluginManifest {
   version: string;
   author: string;
   type: PluginType;
+  plugin_type?: PluginType;
   description: string;
   min_kairo_version?: string;
   permissions: string[];
