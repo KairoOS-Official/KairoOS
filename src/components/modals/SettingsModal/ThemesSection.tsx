@@ -297,31 +297,31 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
     }
   };
 
-  // Charger les thèmes communautaires depuis GitHub
-  const fetchCommunityThemes = async () => {
-    setLoadingCommunity(true);
-    setCommunityError(null);
+  // Charger les thèmes depuis un dossier spécifique du dépôt GitHub (official, community, unverified)
+  const fetchThemesFromCategory = async (category: 'official' | 'community' | 'unverified') => {
     try {
-      const res = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-themes/contents/');
-      if (!res.ok) {
-        throw new Error(`Dépôt distant introuvable (${res.status})`);
-      }
-      const contents: GitHubContentItem[] = await res.json();
-      const folders = contents.filter((item) => item.type === 'dir');
+      const res = await fetch(`https://api.github.com/repos/KairoOS-Official/kairos-themes/contents/${category}`);
+      if (!res.ok) return [];
+      const contents = await res.json();
+      if (!Array.isArray(contents)) return [];
+      const dirs = contents.filter((item: any) => item.type === 'dir' && !item.name.startsWith('.'));
 
-      const loadedThemes = await Promise.all(
-        folders.map(async (folder) => {
+      const loaded = await Promise.all(
+        dirs.map(async (folder: any) => {
           try {
             const rawJson = await fetch(
-              `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/theme.json`
+              `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${category}/${folder.name}/theme.json`
             );
             if (rawJson.ok) {
               const parsed = await rawJson.json();
               const previewImageName = parsed.preview_image || 'preview.svg';
               return {
                 ...parsed,
-                preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/${previewImageName}`,
+                theme_type: category,
+                category,
                 folder_name: folder.name,
+                preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${category}/${folder.name}/${previewImageName}`,
+                fallback_preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/preview.svg`,
               };
             }
           } catch {
@@ -330,16 +330,91 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
           return {
             id: folder.name,
             name: folder.name,
-            author: 'Communauté',
+            author: category === 'official' ? 'Kaïro Team' : category === 'unverified' ? 'Inconnu' : 'Communauté',
             version: '1.0.0',
-            description: 'Thème communautaire KaïroOS',
-            preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/preview.svg`,
+            description: category === 'official' ? 'Thème officiel KaïroOS' : category === 'unverified' ? 'Thème non vérifié' : 'Thème communautaire KaïroOS',
+            theme_type: category,
+            category,
             folder_name: folder.name,
+            preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${category}/${folder.name}/preview.svg`,
+            fallback_preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/preview.svg`,
           };
         })
       );
 
-      setCommunityThemes(loadedThemes.filter(Boolean));
+      return loaded.filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+
+  // Charger les thèmes du store depuis les 3 dossiers (official, community, unverified)
+  const fetchCommunityThemes = async () => {
+    setLoadingCommunity(true);
+    setCommunityError(null);
+    try {
+      const [officialThemes, communityThemesList, unverifiedThemesList] = await Promise.all([
+        fetchThemesFromCategory('official'),
+        fetchThemesFromCategory('community'),
+        fetchThemesFromCategory('unverified'),
+      ]);
+
+      // Fallback de secours si la racine contenait d'anciens thèmes non classés
+      let rootThemes: any[] = [];
+      if (officialThemes.length === 0 && communityThemesList.length === 0) {
+        try {
+          const res = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-themes/contents/');
+          if (res.ok) {
+            const contents: GitHubContentItem[] = await res.json();
+            const rootDirs = contents.filter(
+              (item) => item.type === 'dir' && !['official', 'community', 'unverified', '.github'].includes(item.name)
+            );
+            rootThemes = await Promise.all(
+              rootDirs.map(async (folder) => {
+                try {
+                  const raw = await fetch(
+                    `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/theme.json`
+                  );
+                  if (raw.ok) {
+                    const parsed = await raw.json();
+                    const previewName = parsed.preview_image || 'preview.svg';
+                    return {
+                      ...parsed,
+                      theme_type: 'community',
+                      category: 'community',
+                      folder_name: folder.name,
+                      preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/${previewName}`,
+                      fallback_preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/preview.svg`,
+                    };
+                  }
+                } catch {}
+                return {
+                  id: folder.name,
+                  name: folder.name,
+                  author: 'Communauté',
+                  version: '1.0.0',
+                  description: 'Thème communautaire KaïroOS',
+                  theme_type: 'community',
+                  category: 'community',
+                  folder_name: folder.name,
+                  preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/preview.svg`,
+                  fallback_preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/${folder.name}/preview.svg`,
+                };
+              })
+            );
+          }
+        } catch {}
+      }
+
+      const combined = [...officialThemes, ...communityThemesList, ...unverifiedThemesList, ...rootThemes.filter(Boolean)];
+      const seen = new Set<string>();
+      const unique = combined.filter((t) => {
+        if (!t || seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      });
+
+      setCommunityThemes(unique);
     } catch (err: any) {
       setCommunityError('Catalogue en ligne inaccessible ou aucun thème supplémentaire.');
       setCommunityThemes([]);
@@ -374,70 +449,8 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
     setLoadingUnverified(true);
     setUnverifiedError(null);
     try {
-      const res = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-themes/contents/unverified');
-      if (!res.ok) {
-        if (res.status === 404) {
-          setUnverifiedThemes([]);
-          return;
-        }
-        throw new Error(`Dépôt distant introuvable (${res.status})`);
-      }
-      const contents: GitHubContentItem[] = await res.json();
-      if (!Array.isArray(contents)) {
-        setUnverifiedThemes([]);
-        return;
-      }
-
-      const loadedThemes = await Promise.all(
-        contents.map(async (item) => {
-          if (item.type === 'dir') {
-            try {
-              const rawJson = await fetch(
-                `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}/theme.json`
-              );
-              if (rawJson.ok) {
-                const parsed = await rawJson.json();
-                const previewImageName = parsed.preview_image || 'preview.svg';
-                return {
-                  ...parsed,
-                  theme_type: 'unverified',
-                  preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}/${previewImageName}`,
-                  folder_name: item.name,
-                };
-              }
-            } catch {
-              // ignore
-            }
-            return {
-              id: item.name,
-              name: item.name,
-              author: 'Inconnu',
-              version: '1.0.0',
-              description: 'Thème non vérifié',
-              theme_type: 'unverified',
-              preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}/preview.svg`,
-              folder_name: item.name,
-            };
-          } else if (item.name.endsWith('.json')) {
-            try {
-              const rawJson = await fetch(item.download_url || `https://raw.githubusercontent.com/KairoOS-Official/kairos-themes/main/unverified/${item.name}`);
-              if (rawJson.ok) {
-                const parsed = await rawJson.json();
-                return {
-                  ...parsed,
-                  theme_type: 'unverified',
-                  id: parsed.id || item.name.replace('.json', ''),
-                };
-              }
-            } catch {
-              // ignore
-            }
-          }
-          return null;
-        })
-      );
-
-      setUnverifiedThemes(loadedThemes.filter(Boolean));
+      const themes = await fetchThemesFromCategory('unverified');
+      setUnverifiedThemes(themes);
     } catch (err: any) {
       console.warn('[ThemesSection] Erreur chargement thèmes non vérifiés:', err);
       setUnverifiedThemes([]);
@@ -2167,18 +2180,46 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                 key={item.id}
                 className="rounded-2xl border border-purple-100 p-3.5 bg-white shadow-xs space-y-3"
               >
-                <div className="h-28 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center border border-slate-200/60">
+                <div className="h-28 rounded-xl bg-slate-100 overflow-hidden flex items-center justify-center border border-slate-200/60 relative">
                   {item.preview_url ? (
-                    <img src={item.preview_url} alt={item.name} className="w-full h-full object-cover" />
+                    <img
+                      src={item.preview_url}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        const target = e.currentTarget as HTMLImageElement;
+                        if (item.fallback_preview_url && target.src !== item.fallback_preview_url) {
+                          target.src = item.fallback_preview_url;
+                        } else {
+                          target.style.display = 'none';
+                        }
+                      }}
+                    />
                   ) : (
                     <Palette className="w-8 h-8 text-purple-400" />
                   )}
+                  {item.theme_type === 'unverified' ? (
+                    <div className="absolute top-2 left-2">
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-red-600 text-white shadow-md">
+                        NON VÉRIFIÉ
+                      </span>
+                    </div>
+                  ) : item.theme_type === 'official' ? (
+                    <div className="absolute top-2 left-2">
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-black bg-emerald-600 text-white shadow-md">
+                        OFFICIEL
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
 
                 <div>
-                  <h4 className="text-xs font-black text-slate-900">{item.name}</h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-slate-900 truncate">{item.name}</h4>
+                    <span className="text-[10px] font-mono text-slate-400">v{item.version}</span>
+                  </div>
                   <p className="text-[10px] text-slate-400">
-                    Par <span className="font-bold text-slate-600">{item.author}</span> • v{item.version}
+                    Par <span className="font-bold text-slate-600">{item.author}</span>
                   </p>
                   <p className="text-[11px] text-slate-500 mt-1 line-clamp-2">{item.description}</p>
                 </div>
@@ -2520,7 +2561,12 @@ export const ThemesSection: React.FC<ThemesSectionProps> = ({
                             alt={item.name}
                             className="w-full h-full object-cover"
                             onError={(e) => {
-                              (e.currentTarget as HTMLElement).style.display = 'none';
+                              const target = e.currentTarget as HTMLImageElement;
+                              if (item.fallback_preview_url && target.src !== item.fallback_preview_url) {
+                                target.src = item.fallback_preview_url;
+                              } else {
+                                target.style.display = 'none';
+                              }
                             }}
                           />
                         ) : (

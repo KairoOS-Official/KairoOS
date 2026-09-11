@@ -130,15 +130,23 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
     fetchInstalledPlugins();
   }, []);
 
-  const fetchStorePlugins = async (type: 'official' | 'community' | 'unverified') => {
+  const fetchStorePlugins = async (type: 'official' | 'community') => {
     try {
       setLoadingStore(true);
       setStoreError(null);
       const res = await fetch(`https://api.github.com/repos/KairoOS-Official/kairos-plugins/contents/${type}`);
       if (!res.ok) {
+        if (res.status === 404) {
+          setStorePlugins([]);
+          return;
+        }
         throw new Error('Dépôt inaccessible ou aucun plugin disponible.');
       }
       const contents = await res.json();
+      if (!Array.isArray(contents)) {
+        setStorePlugins([]);
+        return;
+      }
       const dirs = contents.filter((item: any) => item.type === 'dir');
 
       const loaded = await Promise.all(
@@ -151,7 +159,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
               const manifest = await rawJson.json();
               return {
                 ...manifest,
-                plugin_type: type === 'unverified' ? 'unverified' : (manifest.plugin_type || manifest.type || type),
+                plugin_type: manifest.plugin_type || manifest.type || type,
                 folder_name: folder.name,
                 git_url: folder.html_url || `https://github.com/KairoOS-Official/kairos-plugins.git`,
                 preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/${type}/${folder.name}/preview.png`,
@@ -164,26 +172,71 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
         })
       );
 
-      if (type === 'unverified') {
-        setUnverifiedPlugins(loaded.filter(Boolean));
-      } else {
-        setStorePlugins(loaded.filter(Boolean));
-      }
+      setStorePlugins(loaded.filter(Boolean));
     } catch (err: any) {
       setStoreError(err?.message || 'Impossible de joindre le catalogue de plugins.');
-      if (type === 'unverified') {
-        setUnverifiedPlugins([]);
-      } else {
-        setStorePlugins([]);
+      setStorePlugins([]);
+    } finally {
+      setLoadingStore(false);
+    }
+  };
+
+  const fetchUnverifiedPlugins = async () => {
+    try {
+      setLoadingStore(true);
+      setStoreError(null);
+      const res = await fetch('https://api.github.com/repos/KairoOS-Official/kairos-plugins/contents/unverified');
+      if (!res.ok) {
+        if (res.status === 404) {
+          setUnverifiedPlugins([]);
+          return;
+        }
+        throw new Error('Dépôt inaccessible ou aucun plugin non vérifié disponible.');
       }
+      const contents = await res.json();
+      if (!Array.isArray(contents)) {
+        setUnverifiedPlugins([]);
+        return;
+      }
+      const dirs = contents.filter((item: any) => item.type === 'dir');
+
+      const loaded = await Promise.all(
+        dirs.map(async (folder: any) => {
+          try {
+            const rawJson = await fetch(
+              `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/unverified/${folder.name}/plugin.json`
+            );
+            if (rawJson.ok) {
+              const manifest = await rawJson.json();
+              return {
+                ...manifest,
+                plugin_type: 'unverified',
+                folder_name: folder.name,
+                git_url: folder.html_url || `https://github.com/KairoOS-Official/kairos-plugins.git`,
+                preview_url: `https://raw.githubusercontent.com/KairoOS-Official/kairos-plugins/main/unverified/${folder.name}/preview.png`,
+              };
+            }
+          } catch {
+            // ignore
+          }
+          return null;
+        })
+      );
+
+      setUnverifiedPlugins(loaded.filter(Boolean));
+    } catch (err: any) {
+      setStoreError(err?.message || 'Impossible de joindre le catalogue de plugins non vérifiés.');
+      setUnverifiedPlugins([]);
     } finally {
       setLoadingStore(false);
     }
   };
 
   useEffect(() => {
-    if (activeTab === 'official' || activeTab === 'community' || activeTab === 'unverified') {
+    if (activeTab === 'official' || activeTab === 'community') {
       fetchStorePlugins(activeTab);
+    } else if (activeTab === 'unverified') {
+      fetchUnverifiedPlugins();
     }
   }, [activeTab]);
 
@@ -1037,13 +1090,24 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
 
           {/* Section 2 : Catalogue GitHub des plugins non vérifiés */}
           <div className="space-y-4">
-            <div>
-              <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
-                Catalogue Non Vérifié
-              </h3>
-              <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
-                Dépôt communautaire ouvert de KaïroOS (/unverified).
-              </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 style={{ color: 'var(--text-primary)' }} className="text-xs font-black uppercase tracking-wider">
+                  Catalogue Non Vérifié
+                </h3>
+                <p style={{ color: 'var(--text-muted)' }} className="text-[11px]">
+                  Dépôt communautaire ouvert de KaïroOS (/unverified).
+                </p>
+              </div>
+
+              <button
+                onClick={fetchUnverifiedPlugins}
+                disabled={loadingStore}
+                className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-all cursor-pointer"
+                title="Rafraîchir"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loadingStore ? 'animate-spin' : ''}`} />
+              </button>
             </div>
 
             {loadingStore ? (
