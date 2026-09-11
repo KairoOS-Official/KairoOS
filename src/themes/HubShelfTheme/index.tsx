@@ -420,9 +420,9 @@ export const HubShelfTheme: React.FC<ThemeUIProps> = ({
         <div className="flex items-center gap-3">
           <div
             style={{ backgroundColor: 'var(--accent-primary)' }}
-            className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-md shadow-black/10 shrink-0"
+            className="w-10 h-10 rounded-2xl flex items-center justify-center p-1.5 text-white shadow-md shadow-black/10 shrink-0"
           >
-            <Gamepad2 className="w-5 h-5" />
+            <img src="/logo.png" alt="KaïroOS" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="flex items-center gap-2">

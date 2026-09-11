@@ -28,10 +28,10 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
     <div className="p-4 border-b border-purple-100/70 bg-gradient-to-b from-white to-purple-50/30 flex items-center justify-between select-none">
       {/* Brand: 3D Arcade Machine + KAÏRO OS */}
       <div className="flex items-center gap-3">
-        {/* Arcade Cabinet Icon 3D */}
+        {/* Logo KaïroOS */}
         <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-rose-500 p-0.5 shadow-md shadow-pink-500/20 flex items-center justify-center shrink-0">
-          <div className="w-full h-full bg-white/10 backdrop-blur-xs rounded-[14px] flex items-center justify-center text-white">
-            <Gamepad2 className="w-6 h-6 animate-pulse" />
+          <div className="w-full h-full bg-white/10 backdrop-blur-xs rounded-[14px] flex items-center justify-center p-1.5 text-white">
+            <img src="/logo.png" alt="KaïroOS" className="w-full h-full object-contain" />
           </div>
           <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 border-2 border-white shadow-xs" />
         </div>
