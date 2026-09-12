@@ -155,13 +155,15 @@ Pour activer cette interface, ajoutez simplement `"layout_type": "console_launch
 
 ## 🌐 6. Soumettre Votre Thème au Store Communautaire
 
-Le store officiel est hébergé sur GitHub à l'adresse :
-👉 **[https://github.com/NayrolfRdgs/KairoOS-themes](https://github.com/NayrolfRdgs/KairoOS-themes)**
+Le store officiel est hébergé sur GitHub :
+👉 **[https://github.com/KairoOS-Official/kairos-themes](https://github.com/KairoOS-Official/kairos-themes)**
 
 Pour partager votre création avec l'ensemble des utilisateurs de KaïroOS :
 
-1. **Forkez** le dépôt `NayrolfRdgs/KairoOS-themes`.
+1. **Forkez** le dépôt `KairoOS-Official/kairos-themes`.
 2. Ajoutez votre dossier de thème à la racine du dépôt (ex: `mon-super-theme/`).
-3. Vérifiez que votre `theme.json` est un JSON valide et que `preview.png` (ou `preview.svg`) est présent.
+3. Vérifiez que votre `theme.json` est un JSON valide et que `preview.svg` (ou `preview.png`) est présent.
 4. Créez une **Pull Request** avec une capture d'écran et une brève description.
-5. Une fois validé et fusionné, votre thème sera instantanément téléchargeable directement depuis l'onglet **Communauté** de l'interface KaïroOS par tous les joueurs !
+5. Une fois validé et fusionné, votre thème sera instantanément téléchargeable directement depuis l'onglet **Store & En ligne** de l'interface KaïroOS !
+
+> 💡 **Pas de compte GitHub ?** Vous pouvez aussi soumettre votre thème par email à themes@kairo-os.com ou sur Discord dans le canal #theme-submissions.

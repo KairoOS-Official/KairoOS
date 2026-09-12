@@ -46,6 +46,46 @@ export function useAppSettings() {
 
   useEffect(() => {
     loadSettings();
+
+    let unlistenSettings: (() => void) | undefined;
+    let unlistenKiosk: (() => void) | undefined;
+    let unlistenEmus: (() => void) | undefined;
+
+    try {
+      import('@tauri-apps/api/event').then(({ listen }) => {
+        listen<AppSettings>('kairo://settings-updated', (event) => {
+          console.log('[useAppSettings] Synchronisation paramètres reçue en temps réel:', event.payload);
+          setSettings((prev) => ({ ...prev, ...event.payload }));
+          if (event.payload.kiosk_mode !== undefined) {
+            setAppMode(event.payload.kiosk_mode ? 'kiosk' : 'admin');
+          }
+        }).then((fn) => {
+          unlistenSettings = fn;
+        }).catch(() => {});
+
+        listen<boolean>('kairo://kiosk-changed', (event) => {
+          console.log('[useAppSettings] Synchronisation mode kiosk reçue en temps réel:', event.payload);
+          setAppMode(event.payload ? 'kiosk' : 'admin');
+          setSettings((prev) => ({ ...prev, kiosk_mode: event.payload }));
+        }).then((fn) => {
+          unlistenKiosk = fn;
+        }).catch(() => {});
+
+        listen<any>('kairo://emulators-updated', () => {
+          console.log('[useAppSettings] Émulateurs mis à jour en temps réel');
+        }).then((fn) => {
+          unlistenEmus = fn;
+        }).catch(() => {});
+      }).catch(() => {});
+    } catch {
+      // ignore
+    }
+
+    return () => {
+      if (unlistenSettings) unlistenSettings();
+      if (unlistenKiosk) unlistenKiosk();
+      if (unlistenEmus) unlistenEmus();
+    };
   }, [loadSettings]);
 
   const saveSettings = useCallback(async (newSettings: AppSettings) => {

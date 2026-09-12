@@ -109,7 +109,11 @@ export const DisplaySection: React.FC<DisplaySectionProps> = ({
             <input
               type="checkbox"
               checked={Boolean(settings.always_on_top)}
-              onChange={(e) => updateSetting('always_on_top', e.target.checked)}
+              onChange={(e) => {
+                const val = e.target.checked;
+                updateSetting('always_on_top', val);
+                import('../../../api/settings').then((m) => m.setAlwaysOnTop(val)).catch(() => {});
+              }}
               className="w-4 h-4 rounded text-rose-500 focus:ring-rose-400"
             />
           </label>

@@ -14,47 +14,54 @@ import {
   Check,
   ChevronRight,
   Puzzle,
+  Sparkles,
 } from 'lucide-react';
-import { AppSettings, Emulator, RemoteConfig, System, GamepadMapping } from '../../../types';
+import { AppSettings, Emulator, RemoteConfig, System, GamepadMapping, PluginInfo } from '../../../types';
 import { useTheme, useGamepad } from '../../../hooks';
+import { getPlugins } from '../../../api';
 import { ThemesSection } from './ThemesSection';
 import { DisplaySection } from './DisplaySection';
 import { EmulatorsSection } from './EmulatorsSection';
 import { MediaSection } from './MediaSection';
 import { GamepadsSection } from './GamepadsSection';
 import { LibrarySection } from './LibrarySection';
-import { ScrapingSection } from './ScrapingSection';
-import { NetworkSection } from './NetworkSection';
 import { PluginsSection } from './PluginsSection';
 import { AdvancedSection } from './AdvancedSection';
 import { ConsolesTab } from './ConsolesTab';
+import { PluginSettingsTab } from './PluginSettingsTab';
 
-export type SettingsSectionId =
-  | 'themes'
-  | 'display'
-  | 'emulators'
-  | 'media'
-  | 'gamepads'
-  | 'library'
-  | 'scraping'
-  | 'network'
-  | 'plugins'
-  | 'consoles'
-  | 'advanced';
+export type SettingsSectionId = string;
 
-const SECTIONS_LIST: { id: SettingsSectionId; label: string; icon: React.ReactNode }[] = [
-  { id: 'themes', label: 'Thèmes & Style', icon: <Palette className="w-4 h-4" /> },
-  { id: 'display', label: 'Affichage & Écran', icon: <Monitor className="w-4 h-4" /> },
-  { id: 'emulators', label: 'Émulateurs & CLI', icon: <Cpu className="w-4 h-4" /> },
-  { id: 'media', label: 'Image & Son', icon: <Tv className="w-4 h-4" /> },
-  { id: 'gamepads', label: 'Manettes', icon: <Gamepad2 className="w-4 h-4" /> },
-  { id: 'library', label: 'Bibliothèque', icon: <Library className="w-4 h-4" /> },
-  { id: 'scraping', label: 'Scraping', icon: <Globe className="w-4 h-4" /> },
-  { id: 'network', label: 'Réseau & Remote', icon: <Wifi className="w-4 h-4" /> },
-  { id: 'plugins', label: 'Plugins & Extensions', icon: <Puzzle className="w-4 h-4" /> },
-  { id: 'consoles', label: 'Consoles & Modes', icon: <Layers className="w-4 h-4" /> },
-  { id: 'advanced', label: 'Avancé & Système', icon: <SettingsIcon className="w-4 h-4" /> },
-];
+export interface SectionItem {
+  id: SettingsSectionId;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const renderPluginIcon = (iconName?: string) => {
+  switch (iconName?.toLowerCase()) {
+    case 'globe':
+      return <Globe className="w-4 h-4" />;
+    case 'wifi':
+      return <Wifi className="w-4 h-4" />;
+    case 'gamepad':
+      return <Gamepad2 className="w-4 h-4" />;
+    case 'cpu':
+      return <Cpu className="w-4 h-4" />;
+    case 'monitor':
+      return <Monitor className="w-4 h-4" />;
+    case 'tv':
+      return <Tv className="w-4 h-4" />;
+    case 'library':
+      return <Library className="w-4 h-4" />;
+    case 'palette':
+      return <Palette className="w-4 h-4" />;
+    case 'sparkles':
+      return <Sparkles className="w-4 h-4" />;
+    default:
+      return <Puzzle className="w-4 h-4" />;
+  }
+};
 
 interface SettingsModalProps {
   settings: AppSettings;
@@ -139,23 +146,73 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     );
   }, []);
 
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+
+  useEffect(() => {
+    getPlugins()
+      .then((list) => {
+        setPlugins(list);
+      })
+      .catch((err) => console.error('[SettingsModal] Erreur chargement plugins:', err));
+  }, []);
+
+  const visibleSections = useMemo((): SectionItem[] => {
+    const list: SectionItem[] = [
+      { id: 'themes', label: 'Thèmes & Style', icon: <Palette className="w-4 h-4" /> },
+      { id: 'display', label: 'Affichage & Écran', icon: <Monitor className="w-4 h-4" /> },
+      { id: 'emulators', label: 'Émulateurs & CLI', icon: <Cpu className="w-4 h-4" /> },
+      { id: 'media', label: 'Image & Son', icon: <Tv className="w-4 h-4" /> },
+      { id: 'gamepads', label: 'Manettes', icon: <Gamepad2 className="w-4 h-4" /> },
+      { id: 'library', label: 'Bibliothèque', icon: <Library className="w-4 h-4" /> },
+    ];
+
+    // Plugins activés avec page ou paramètres de configuration (dynamique universel)
+    const activePluginTabs = plugins
+      .filter((p) => p.enabled && (p.has_settings || p.settings_section))
+      .sort((a, b) => (a.settings_section?.order ?? 99) - (b.settings_section?.order ?? 99));
+
+    activePluginTabs.forEach((p) => {
+      list.push({
+        id: `plugin:${p.id}`,
+        label: p.settings_section?.label || p.name,
+        icon: renderPluginIcon(p.settings_section?.icon),
+      });
+    });
+
+    list.push(
+      { id: 'consoles', label: 'Consoles & Modes', icon: <Layers className="w-4 h-4" /> },
+      { id: 'plugins', label: 'Plugins & Extensions', icon: <Puzzle className="w-4 h-4" /> },
+      { id: 'advanced', label: 'Avancé & Système', icon: <SettingsIcon className="w-4 h-4" /> }
+    );
+
+    return list;
+  }, [plugins]);
+
+  // Si l'onglet actif est masqué (ex: plugin désactivé), basculer automatiquement
+  useEffect(() => {
+    const isVisible = visibleSections.some((s) => s.id === activeSection);
+    if (!isVisible && visibleSections.length > 0) {
+      setActiveSection(visibleSections[0].id);
+    }
+  }, [visibleSections, activeSection]);
+
   const handlePrevTab = useCallback(() => {
     setActiveSection((curr) => {
-      const idx = SECTIONS_LIST.findIndex((s) => s.id === curr);
-      const prevIdx = idx > 0 ? idx - 1 : SECTIONS_LIST.length - 1;
-      return SECTIONS_LIST[prevIdx].id;
+      const idx = visibleSections.findIndex((s) => s.id === curr);
+      const prevIdx = idx > 0 ? idx - 1 : visibleSections.length - 1;
+      return visibleSections[prevIdx].id;
     });
     setContentFocusIndex(0);
-  }, []);
+  }, [visibleSections]);
 
   const handleNextTab = useCallback(() => {
     setActiveSection((curr) => {
-      const idx = SECTIONS_LIST.findIndex((s) => s.id === curr);
-      const nextIdx = idx < SECTIONS_LIST.length - 1 ? idx + 1 : 0;
-      return SECTIONS_LIST[nextIdx].id;
+      const idx = visibleSections.findIndex((s) => s.id === curr);
+      const nextIdx = idx < visibleSections.length - 1 ? idx + 1 : 0;
+      return visibleSections[nextIdx].id;
     });
     setContentFocusIndex(0);
-  }, []);
+  }, [visibleSections]);
 
   const handleGamepadNavigate = useCallback(
     (dir: 'up' | 'down' | 'left' | 'right') => {
@@ -273,14 +330,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [focusZone, contentFocusIndex, activeSection, getFocusableElements]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/60 backdrop-blur-md animate-fadeIn select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/60 backdrop-blur-md animate-fadeIn select-none">
       <div
         style={{
           backgroundColor: 'var(--bg-card)',
           borderColor: 'var(--border-color)',
           color: 'var(--text-primary)',
         }}
-        className="relative w-full max-w-5xl h-[88vh] border rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        className="relative w-full max-w-[95vw] 2xl:max-w-[1550px] h-[92vh] border rounded-3xl shadow-2xl overflow-hidden flex flex-col"
       >
         {/* Header Bar */}
         <div
@@ -344,7 +401,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
             className="w-64 border-r p-3 flex flex-col gap-1 overflow-y-auto shrink-0"
           >
-            {SECTIONS_LIST.map((item) => {
+            {visibleSections.map((item) => {
               const isActive = activeSection === item.id;
               const isSelectedInSidebar = focusZone === 'sidebar' && isActive;
               return (
@@ -390,7 +447,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             style={{
               backgroundColor: 'var(--bg-primary)',
             }}
-            className="flex-1 overflow-y-auto p-6 scrollbar-thin"
+            className="flex-1 overflow-y-auto overflow-x-hidden p-6 scrollbar-thin"
           >
             {activeSection === 'themes' && (
               <ThemesSection
@@ -437,19 +494,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               />
             )}
 
-            {activeSection === 'scraping' && (
-              <ScrapingSection settings={localSettings} updateSetting={updateSetting} />
-            )}
-
-            {activeSection === 'network' && (
-              <NetworkSection
-                settings={localSettings}
-                updateSetting={updateSetting}
-                remoteConfig={remoteConfig}
-                onSaveRemoteConfig={onSaveRemoteConfig}
-              />
-            )}
-
             {activeSection === 'consoles' && (
               <ConsolesTab
                 systems={systems}
@@ -463,7 +507,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             )}
 
             {activeSection === 'plugins' && (
-              <PluginsSection />
+              <PluginsSection onPluginsChange={setPlugins} />
+            )}
+
+            {activeSection.startsWith('plugin:') && (
+              <PluginSettingsTab
+                pluginId={activeSection.replace('plugin:', '')}
+                settings={localSettings}
+                updateSetting={updateSetting}
+                remoteConfig={remoteConfig}
+                onSaveRemoteConfig={onSaveRemoteConfig}
+              />
             )}
 
             {activeSection === 'advanced' && (

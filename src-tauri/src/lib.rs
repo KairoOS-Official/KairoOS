@@ -5,8 +5,46 @@ pub mod commands;
 use commands::AppState;
 use kairo_core::{Database, Launcher};
 
+fn init_logging_and_panic_hook() {
+    let logs_dir = kairo_core::AppPaths::get_logs_dir();
+    let _ = std::fs::create_dir_all(&logs_dir);
+    let crash_file = logs_dir.join("crash.log");
+
+    kairo_core::AppPaths::log("INFO", "=== Démarrage de KaïroOS ===");
+
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let payload = if let Some(s) = panic_info.payload().downcast_ref::<&str>() {
+            (*s).to_string()
+        } else if let Some(s) = panic_info.payload().downcast_ref::<String>() {
+            s.clone()
+        } else {
+            "Panique inconnue".to_string()
+        };
+        let location = if let Some(loc) = panic_info.location() {
+            format!("{}:{}:{}", loc.file(), loc.line(), loc.column())
+        } else {
+            "localisation inconnue".to_string()
+        };
+
+        let msg = format!("[{}] [PANIC] {} à {}", now, payload, location);
+        eprintln!("{}", msg);
+        kairo_core::AppPaths::log("PANIC", &format!("{} à {}", payload, location));
+
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&crash_file) {
+            let _ = writeln!(f, "{}", msg);
+        }
+
+        default_hook(panic_info);
+    }));
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_logging_and_panic_hook();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -47,6 +85,41 @@ pub fn run() {
             let app_mode = Arc::new(RwLock::new(initial_mode));
 
             let plugin_manager = kairo_core::PluginManager::new(Some(db.clone()), Some(launcher.clone()));
+
+            // Pont temps-réel : connecter les événements du serveur distant à l'IPC Tauri (UI Desktop)
+            let app_handle_for_remote = app.handle().clone();
+            let app_mode_for_event = Arc::clone(&app_mode);
+            plugin_manager.set_remote_event_callback(Arc::new(move |event| {
+                use tauri::Emitter;
+                match event {
+                    kairo_core::RemoteEvent::SettingsUpdated(settings) => {
+                        if let Some(main_window) = app_handle_for_remote.get_webview_window("main") {
+                            let _ = main_window.set_fullscreen(settings.fullscreen);
+                            let _ = main_window.set_always_on_top(settings.always_on_top);
+                        }
+                        let _ = app_handle_for_remote.emit("kairo://settings-updated", *settings);
+                    }
+                    kairo_core::RemoteEvent::ThemeChanged(theme_id) => {
+                        let _ = app_handle_for_remote.emit("kairo://theme-changed", theme_id);
+                    }
+                    kairo_core::RemoteEvent::ThemeUpdated(theme_id) => {
+                        let _ = app_handle_for_remote.emit("kairo://theme-updated", theme_id);
+                    }
+                    kairo_core::RemoteEvent::KioskChanged(kiosk) => {
+                        if let Ok(mut mode) = app_mode_for_event.write() {
+                            *mode = if kiosk { "kiosk".to_string() } else { "admin".to_string() };
+                        }
+                        let _ = app_handle_for_remote.emit("kairo://kiosk-changed", kiosk);
+                    }
+                    kairo_core::RemoteEvent::EmulatorsUpdated(emus) => {
+                        let _ = app_handle_for_remote.emit("kairo://emulators-updated", emus);
+                    }
+                    kairo_core::RemoteEvent::PluginsUpdated => {
+                        let _ = app_handle_for_remote.emit("kairo://plugins-updated", ());
+                    }
+                }
+            }));
+
             plugin_manager.auto_start_enabled_plugins();
 
             // Appliquer le mode plein écran et always on top au démarrage selon les paramètres sauvegardés
@@ -114,12 +187,14 @@ pub fn run() {
             commands::enable_plugin,
             commands::disable_plugin,
             commands::install_plugin,
+            commands::install_plugin_from_url,
             commands::confirm_install_plugin,
             commands::uninstall_plugin,
             commands::update_plugin_settings,
             commands::get_plugin_commands,
             commands::run_plugin_command,
             commands::open_plugins_folder,
+            commands::get_plugin_contributions,
         ])
         .run(tauri::generate_context!())
 

@@ -1,5 +1,6 @@
 # Rust & Cargo
 /target
+target-test/
 **/target
 Cargo.lock
 
@@ -59,5 +60,18 @@ emulators/RetroArch/content_history.lpl
 emulators/RetroArch/kairo_gamepads.cfg
 emulators/RetroArch/retroarch.cfg
 crates/**/emulators/
+
+# AI Agent Instructions & Private Documentation (Non public)
+AGENTS.md
+docs/AGENT_PHILOSOPHY.md
+docs/*AGENT*.md
+docs/*PHILOSOPHY*.md
+docs/PROMPTS.md
+
+# Plugins installés non-builtin
+plugins/*
+!plugins/kairo-remote/
+!plugins/kairo-scraper/
+
 
 

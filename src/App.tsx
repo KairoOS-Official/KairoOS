@@ -10,6 +10,7 @@ import {
   AddGameModal,
 } from './components/modals';
 import { LaunchOverlay } from './components/overlay';
+import { PluginScreensaverHost } from './components/PluginScreensaverHost';
 import { useLibrary, useLauncher, useAppSettings, useGamepad, useTheme } from './hooks';
 import { Game, GameConfig, LocalGameMetadata } from './types';
 import {
@@ -703,6 +704,9 @@ export const App: React.FC = () => {
       {isGameRunning && (
         <LaunchOverlay status={launchStatus} onKillGame={kill} />
       )}
+
+      {/* Hôte dynamique d'écran de veille et d'arrière-plan audio pour plugins (Règle 1 & 2) */}
+      <PluginScreensaverHost isGameRunning={isGameRunning} remotePort={remoteConfig.port} />
     </div>
   );
 };

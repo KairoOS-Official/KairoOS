@@ -1,6 +1,23 @@
 import React from 'react';
-import { LayoutDashboard, Gamepad2, PlusCircle, Sliders, Lock, Shield, Smartphone } from 'lucide-react';
-import { ThemeMode, StatusResponse } from '../types';
+import { LayoutDashboard, Gamepad2, PlusCircle, Sliders, Lock, Shield, Smartphone, Terminal, Puzzle, Globe, Trophy, Sparkles, Tv, Download } from 'lucide-react';
+import { ThemeMode, StatusResponse, ContributedNavItem } from '../types';
+
+const renderContributedIcon = (iconName?: string) => {
+  switch (iconName?.toLowerCase()) {
+    case 'globe':
+      return <Globe className="w-4 h-4 text-indigo-500" />;
+    case 'trophy':
+      return <Trophy className="w-4 h-4 text-amber-500" />;
+    case 'sparkles':
+      return <Sparkles className="w-4 h-4 text-pink-500" />;
+    case 'download':
+      return <Download className="w-4 h-4 text-emerald-500" />;
+    case 'tv':
+      return <Tv className="w-4 h-4 text-cyan-500" />;
+    default:
+      return <Puzzle className="w-4 h-4 text-purple-500" />;
+  }
+};
 
 interface SidebarProps {
   currentTab: string;
@@ -9,6 +26,7 @@ interface SidebarProps {
   gamesCount: number;
   theme: ThemeMode;
   onOpenGamepad: () => void;
+  contributedNavItems?: ContributedNavItem[];
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -18,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   gamesCount,
   theme,
   onOpenGamepad,
+  contributedNavItems,
 }) => {
   const isDark = theme === 'dark';
 
@@ -54,6 +73,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badgeColor: status?.kiosk_mode
         ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
         : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+    },
+    {
+      id: 'console',
+      label: 'Console Admin',
+      icon: Terminal,
     },
   ];
 
@@ -103,6 +127,41 @@ export const Sidebar: React.FC<SidebarProps> = ({
             );
           })}
         </nav>
+
+        {/* Extensions & Intégrations Contributrices */}
+        {contributedNavItems && contributedNavItems.length > 0 && (
+          <div className="pt-3 border-t border-slate-200">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-1">
+              Extensions
+            </div>
+            <nav className="space-y-1">
+              {contributedNavItems.map((item) => {
+                const isActive = currentTab === `contrib:${item.id}`;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelectTab(`contrib:${item.id}`)}
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {renderContributedIcon(item.icon)}
+                      <span>{item.label}</span>
+                    </div>
+                    {item.badge && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        )}
 
         {/* Bouton rapide Manette Virtuelle */}
         <div className="pt-2">

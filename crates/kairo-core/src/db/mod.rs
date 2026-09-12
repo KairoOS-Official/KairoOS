@@ -19,6 +19,7 @@ pub enum DbError {
 #[derive(Clone)]
 pub struct Database {
     conn: Arc<Mutex<Connection>>,
+    is_in_memory: bool,
 }
 
 use crate::paths::AppPaths;
@@ -32,6 +33,7 @@ impl Database {
         let conn = Connection::open(path)?;
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
+            is_in_memory: false,
         };
         db.init()?;
         Ok(db)
@@ -41,6 +43,7 @@ impl Database {
         let conn = Connection::open_in_memory()?;
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),
+            is_in_memory: true,
         };
         db.init()?;
         Ok(db)
@@ -448,24 +451,27 @@ impl Database {
     }
 
     pub fn get_app_settings(&self) -> std::result::Result<AppSettings, DbError> {
-        let config_file = get_root_config_dir().join("settings.json");
-        if config_file.exists() {
-            if let Ok(content) = std::fs::read_to_string(&config_file) {
-                if let Ok(settings) = serde_json::from_str::<AppSettings>(&content) {
-                    return Ok(settings);
+        // 1. Lire settings.json uniquement pour une base réelle (pas en mémoire / tests)
+        if !self.is_in_memory {
+            let config_file = get_root_config_dir().join("settings.json");
+            if config_file.exists() {
+                if let Ok(content) = std::fs::read_to_string(&config_file) {
+                    if let Ok(s) = serde_json::from_str::<AppSettings>(&content) {
+                        return Ok(s);
+                    }
                 }
             }
         }
 
-        // 2. Fallback SQLite
+        // 2. Fallback SQLite (ou lecture directe si in-memory)
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare("SELECT value FROM app_settings WHERE key = 'general'")?;
         let mut rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
 
         if let Some(res) = rows.next() {
             let json_str = res?;
-            let settings: AppSettings = serde_json::from_str(&json_str)?;
-            Ok(settings)
+            let s: AppSettings = serde_json::from_str(&json_str)?;
+            Ok(s)
         } else {
             Ok(AppSettings::default())
         }
@@ -482,24 +488,29 @@ impl Database {
         )?;
         drop(conn);
 
-        // 2. Écrire le fichier config/settings.json
-        let config_dir = get_root_config_dir();
-        if !config_dir.exists() {
-            let _ = std::fs::create_dir_all(&config_dir);
-        }
-        if let Ok(pretty_json) = serde_json::to_string_pretty(settings) {
-            let _ = std::fs::write(config_dir.join("settings.json"), &pretty_json);
+        // 2. Écrire le fichier config/settings.json uniquement pour les bases réelles
+        if !self.is_in_memory {
+            let config_dir = get_root_config_dir();
+            if !config_dir.exists() {
+                let _ = std::fs::create_dir_all(&config_dir);
+            }
+            if let Ok(pretty_json) = serde_json::to_string_pretty(settings) {
+                let _ = std::fs::write(config_dir.join("settings.json"), &pretty_json);
+            }
         }
 
         Ok(())
     }
 
     pub fn get_gamepad_mappings(&self) -> std::result::Result<Vec<crate::models::GamepadMapping>, DbError> {
-        let config_file = get_root_config_dir().join("gamepads.json");
-        if config_file.exists() {
-            if let Ok(content) = std::fs::read_to_string(&config_file) {
-                if let Ok(mappings) = serde_json::from_str::<Vec<crate::models::GamepadMapping>>(&content) {
-                    return Ok(mappings);
+        // 1. Lire gamepads.json uniquement pour une base réelle
+        if !self.is_in_memory {
+            let config_file = get_root_config_dir().join("gamepads.json");
+            if config_file.exists() {
+                if let Ok(content) = std::fs::read_to_string(&config_file) {
+                    if let Ok(mappings) = serde_json::from_str::<Vec<crate::models::GamepadMapping>>(&content) {
+                        return Ok(mappings);
+                    }
                 }
             }
         }
@@ -530,22 +541,27 @@ impl Database {
         )?;
         drop(conn);
 
-        // 2. Écrire le fichier config/gamepads.json formaté
-        let config_dir = get_root_config_dir();
-        if !config_dir.exists() {
-            let _ = std::fs::create_dir_all(&config_dir);
-        }
-        if let Ok(pretty_json) = serde_json::to_string_pretty(mappings) {
-            let _ = std::fs::write(config_dir.join("gamepads.json"), &pretty_json);
-        }
+        // 2. Écrire le fichier config/gamepads.json formaté (uniquement pour les bases réelles)
+        if !self.is_in_memory {
+            let config_dir = get_root_config_dir();
+            if !config_dir.exists() {
+                let _ = std::fs::create_dir_all(&config_dir);
+            }
+            if let Ok(pretty_json) = serde_json::to_string_pretty(mappings) {
+                let _ = std::fs::write(config_dir.join("gamepads.json"), &pretty_json);
+            }
 
-        // 3. Injecter la configuration directement dans les fichiers retroarch.cfg et kairo_gamepads.cfg
-        self.sync_gamepads_to_retroarch(mappings);
+            // 3. Injecter la configuration directement dans les fichiers retroarch.cfg et kairo_gamepads.cfg
+            self.sync_gamepads_to_retroarch(mappings);
+        }
 
         Ok(())
     }
 
     fn sync_gamepads_to_retroarch(&self, mappings: &[crate::models::GamepadMapping]) {
+        if self.is_in_memory {
+            return;
+        }
         let mut retro_lines = vec![
             "# KaïroOS Arcade Station — Gamepad Mappings (Auto-Generated)".to_string(),
             "input_autodetect_enable = \"false\"".into(),

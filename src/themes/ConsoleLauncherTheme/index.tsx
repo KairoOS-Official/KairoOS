@@ -208,6 +208,7 @@ export const ConsoleLauncherTheme: React.FC<ThemeUIProps> = ({
       <header className="kairo-launcher-topbar absolute top-0 inset-x-0 z-30 px-8 py-5 flex items-center justify-between pointer-events-none">
         {/* Marque / Titre Kaïro */}
         <div className="flex items-center gap-3 pointer-events-auto">
+          <img src="/logo.png" alt="KaïroOS" className="w-8 h-8 object-contain drop-shadow-md" />
           <span className="text-xl font-black tracking-wider drop-shadow-md text-white">
             Kaïro
           </span>

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Check, Search, Sparkles, Download, Loader2 } from 'lucide-react';
+import { Check, Search, Sparkles, Download, Loader2, Globe, ExternalLink, AlertCircle, CheckCircle } from 'lucide-react';
 import { Game, LocalGameMetadata } from '../../../types';
 
 import { searchOnlineGameMetadata, downloadGameMedia } from '../../../utils/scraper';
+import { openExternalUrl } from '../../../utils';
 
 interface GameMetadataTabProps {
   game: Game;
@@ -19,9 +20,12 @@ export const GameMetadataTab: React.FC<GameMetadataTabProps> = ({ game, onSaveMe
   const [metaRating, setMetaRating] = useState<string>(game.rating ? game.rating.toString() : '');
   const [metaPlayers, setMetaPlayers] = useState<string>(game.players ? game.players.toString() : '');
   const [metaSynopsis, setMetaSynopsis] = useState(game.synopsis || '');
+  const [metaCoverUrl, setMetaCoverUrl] = useState(game.cover_url || '');
+  const [metaBackdropUrl, setMetaBackdropUrl] = useState(game.backdrop_url || '');
   
   const [isSearching, setIsSearching] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [fetchStatus, setFetchStatus] = useState<{ type: 'success' | 'not_found' | 'error'; message: string } | null>(null);
 
   // Media download states
   const [scrapedMedia, setScrapedMedia] = useState<{ cover?: string; backdrop?: string; screenshots?: string[]; video?: string } | null>(null);
@@ -34,8 +38,23 @@ export const GameMetadataTab: React.FC<GameMetadataTabProps> = ({ game, onSaveMe
   const handleAutoFetch = async () => {
     setIsSearching(true);
     setScrapedMedia(null);
+    setFetchStatus(null);
     try {
       const scraped = await searchOnlineGameMetadata(metaTitle || game.title, game.system_id);
+      
+      if (!scraped.found) {
+        setFetchStatus({
+          type: 'not_found',
+          message: 'Introuvable : Aucun résultat ou jaquette trouvé en ligne pour ce jeu.',
+        });
+        return;
+      }
+
+      setFetchStatus({
+        type: 'success',
+        message: '✓ Informations et médias trouvés ! Vérifiez les champs et cliquez sur Enregistrer ci-dessous.',
+      });
+
       if (scraped.title) setMetaTitle(scraped.title);
       if (scraped.release_date) setMetaReleaseDate(scraped.release_date);
       if (scraped.developer) setMetaDeveloper(scraped.developer);
@@ -44,6 +63,8 @@ export const GameMetadataTab: React.FC<GameMetadataTabProps> = ({ game, onSaveMe
       if (scraped.rating) setMetaRating(scraped.rating.toString());
       if (scraped.players) setMetaPlayers(scraped.players.toString());
       if (scraped.synopsis) setMetaSynopsis(scraped.synopsis);
+      if (scraped.cover_url) setMetaCoverUrl(scraped.cover_url);
+      if (scraped.backdrop_url) setMetaBackdropUrl(scraped.backdrop_url);
 
       if (scraped.cover_url || scraped.backdrop_url || scraped.screenshots?.length || scraped.video_url) {
         setScrapedMedia({
@@ -57,8 +78,12 @@ export const GameMetadataTab: React.FC<GameMetadataTabProps> = ({ game, onSaveMe
         setDlScreenshots(!!scraped.screenshots?.length);
         setDlVideo(!!scraped.video_url);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Erreur auto scrape:', err);
+      setFetchStatus({
+        type: 'error',
+        message: `Erreur lors de la recherche : ${err?.message || 'Échec réseau'}`,
+      });
     } finally {
       setIsSearching(false);
     }
@@ -79,8 +104,8 @@ export const GameMetadataTab: React.FC<GameMetadataTabProps> = ({ game, onSaveMe
       rating: isNaN(parsedRating) ? undefined : parsedRating,
       players: isNaN(parsedPlayers) ? undefined : parsedPlayers,
       synopsis: metaSynopsis.trim() ? metaSynopsis.trim() : undefined,
-      cover_url: mediaUrls?.cover_url || game.cover_url,
-      backdrop_url: mediaUrls?.backdrop_url || game.backdrop_url,
+      cover_url: mediaUrls?.cover_url || (metaCoverUrl.trim() ? metaCoverUrl.trim() : game.cover_url),
+      backdrop_url: mediaUrls?.backdrop_url || (metaBackdropUrl.trim() ? metaBackdropUrl.trim() : game.backdrop_url),
       screenshots: mediaUrls?.screenshots,
       video_url: mediaUrls?.video_url,
     };
@@ -137,6 +162,28 @@ export const GameMetadataTab: React.FC<GameMetadataTabProps> = ({ game, onSaveMe
           <span>{isSearching ? 'Recherche...' : 'Rechercher Infos'}</span>
         </button>
       </div>
+
+      {/* Bannière de résultat de recherche */}
+      {fetchStatus && (
+        <div
+          className={`p-3.5 rounded-2xl border text-xs font-bold flex items-center gap-2.5 transition-all ${
+            fetchStatus.type === 'not_found'
+              ? 'bg-rose-50 border-rose-200 text-rose-800'
+              : fetchStatus.type === 'success'
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-amber-50 border-amber-200 text-amber-800'
+          }`}
+        >
+          {fetchStatus.type === 'not_found' ? (
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+          ) : fetchStatus.type === 'success' ? (
+            <CheckCircle className="w-4 h-4 shrink-0 text-emerald-500" />
+          ) : (
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-500" />
+          )}
+          <span>{fetchStatus.message}</span>
+        </div>
+      )}
 
       {scrapedMedia && (
         <div className="p-4 rounded-2xl bg-white border border-indigo-100 shadow-sm space-y-3">
@@ -294,6 +341,62 @@ export const GameMetadataTab: React.FC<GameMetadataTabProps> = ({ game, onSaveMe
             value={metaPlayers}
             onChange={(e) => setMetaPlayers(e.target.value)}
             placeholder="ex: 2"
+            className="w-full px-3.5 py-2 rounded-xl bg-white border border-purple-100 text-xs font-mono text-slate-800 focus:outline-none focus:border-rose-500 shadow-xs"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+              Jaquette (Cover URL ou chemin)
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                const q = encodeURIComponent(`${metaTitle || game.title} ${game.system_id || ''} box art cover arcade`);
+                openExternalUrl(`https://www.google.com/search?tbm=isch&q=${q}`);
+              }}
+              className="text-[11px] font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer"
+            >
+              <Globe className="w-3 h-3" />
+              <span>Google Images</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </button>
+          </div>
+          <input
+            type="text"
+            value={metaCoverUrl}
+            onChange={(e) => setMetaCoverUrl(e.target.value)}
+            placeholder="https://... ou media/cover.png"
+            className="w-full px-3.5 py-2 rounded-xl bg-white border border-purple-100 text-xs font-mono text-slate-800 focus:outline-none focus:border-rose-500 shadow-xs"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+              Fond d'écran (Backdrop)
+            </label>
+            <button
+              type="button"
+              onClick={() => {
+                const q = encodeURIComponent(`${metaTitle || game.title} ${game.system_id || ''} wallpaper backdrop`);
+                openExternalUrl(`https://www.google.com/search?tbm=isch&q=${q}`);
+              }}
+              className="text-[11px] font-bold text-rose-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer"
+            >
+              <Globe className="w-3 h-3" />
+              <span>Google Images</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </button>
+          </div>
+          <input
+            type="text"
+            value={metaBackdropUrl}
+            onChange={(e) => setMetaBackdropUrl(e.target.value)}
+            placeholder="https://... ou media/backdrop.jpg"
             className="w-full px-3.5 py-2 rounded-xl bg-white border border-purple-100 text-xs font-mono text-slate-800 focus:outline-none focus:border-rose-500 shadow-xs"
           />
         </div>

@@ -40,12 +40,12 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
         className="p-2.5 rounded-2xl border shadow-xs flex items-center justify-between"
       >
         <div className="flex items-center gap-2.5">
-          {/* Logo 3D Arcade */}
+          {/* Logo KaïroOS */}
           <div
             style={{ backgroundColor: 'var(--accent-primary)' }}
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-white shadow-sm shadow-black/10 shrink-0"
+            className="w-9 h-9 rounded-xl flex items-center justify-center p-1 text-white shadow-sm shadow-black/10 shrink-0"
           >
-            <Gamepad2 className="w-5 h-5" />
+            <img src="/logo.png" alt="KaïroOS" className="w-6 h-6 object-contain" />
           </div>
 
           <div>

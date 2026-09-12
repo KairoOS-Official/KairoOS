@@ -225,6 +225,10 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
+            let dev_plugins = Self::get_dev_project_dir().join("plugins");
+            if dev_plugins.exists() {
+                return dev_plugins;
+            }
             let p = Self::get_appdata_dir().join("plugins");
             let _ = std::fs::create_dir_all(&p);
             p
@@ -247,5 +251,18 @@ impl AppPaths {
             }
         }
         dirs
+    }
+
+    /// Écrit un message horodaté dans le journal `logs/kairo.log`
+    pub fn log(level: &str, msg: &str) {
+        let logs_dir = Self::get_logs_dir();
+        let log_file = logs_dir.join("kairo.log");
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let formatted = format!("[{}] [{}] {}", now, level, msg);
+        println!("{}", formatted);
+        use std::io::Write;
+        if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(log_file) {
+            let _ = writeln!(file, "{}", formatted);
+        }
     }
 }

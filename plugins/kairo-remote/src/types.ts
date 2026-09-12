@@ -131,4 +131,74 @@ export interface AppSettings {
   scraping_delay_seconds?: number;
   screenscraper_ssid?: string;
   screenscraper_sspassword?: string;
+  hide_mouse_cursor?: boolean;
+  ui_resolution?: string;
+  ui_language?: string;
+  cores_dir?: string;
+  startup_sound_enabled?: boolean;
+  auto_scan_on_startup?: boolean;
+  default_view?: string;
+  show_games_without_cover?: boolean;
+  recent_games_limit?: number;
+  extra_cli_args?: string;
+  debug_logs?: boolean;
+  button_prompt_style?: string;
+}
+
+export interface Theme {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  description: string;
+  is_active: boolean;
+  is_builtin?: boolean;
+  colors?: {
+    bg_primary?: string;
+    bg_secondary?: string;
+    bg_card?: string;
+    accent_primary?: string;
+    text_primary?: string;
+    text_muted?: string;
+    border_color?: string;
+  };
+}
+
+export interface PluginInfo {
+  id: string;
+  name: string;
+  version: string;
+  author: string;
+  plugin_type: string;
+  description: string;
+  enabled: boolean;
+  running: boolean;
+  permissions: string[];
+  commands: string[];
+  ui?: string;
+  has_settings: boolean;
+  settings_section?: {
+    label?: string;
+    icon?: string;
+    order?: number;
+  };
+  host?: any;
+  contributes?: any;
+  path: string;
+}
+
+export interface PluginContributionPayload {
+  from: string;
+  to: string;
+  integration_point: string;
+  data: any;
+}
+
+export interface ContributedNavItem {
+  id: string;
+  from: string;
+  label: string;
+  icon?: string;
+  badge?: string;
+  url: string;
 }

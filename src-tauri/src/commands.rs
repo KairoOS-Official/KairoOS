@@ -25,9 +25,12 @@ pub fn save_app_settings(
     window: Window,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    use tauri::Emitter;
     let _ = window.set_fullscreen(settings.fullscreen);
     let _ = window.set_always_on_top(settings.always_on_top);
-    state.db.save_app_settings(&settings).map_err(|e| e.to_string())
+    state.db.save_app_settings(&settings).map_err(|e| e.to_string())?;
+    let _ = window.emit("kairo://settings-updated", &settings);
+    Ok(())
 }
 
 #[tauri::command]
@@ -36,8 +39,13 @@ pub fn set_fullscreen(fullscreen: bool, window: Window) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn set_always_on_top(always_on_top: bool, window: Window) -> Result<(), String> {
-    window.set_always_on_top(always_on_top).map_err(|e| e.to_string())
+pub fn set_always_on_top(always_on_top: bool, window: Window, state: State<'_, AppState>) -> Result<(), String> {
+    window.set_always_on_top(always_on_top).map_err(|e| e.to_string())?;
+    if let Ok(mut settings) = state.db.get_app_settings() {
+        settings.always_on_top = always_on_top;
+        let _ = state.db.save_app_settings(&settings);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -293,8 +301,11 @@ pub fn get_remote_config() -> RemoteConfig {
 }
 
 #[tauri::command]
-pub fn save_remote_config(config: RemoteConfig) -> Result<(), String> {
-    RemoteConfig::save(&config).map_err(|e| e.to_string())
+pub fn save_remote_config(config: RemoteConfig, state: State<'_, AppState>) -> Result<(), String> {
+    RemoteConfig::save(&config).map_err(|e| e.to_string())?;
+    // Redémarre tout plugin fournissant le service builtin remote_server
+    state.plugin_manager.restart_by_builtin_service("remote_server");
+    Ok(())
 }
 
 #[tauri::command]
@@ -514,22 +525,21 @@ pub fn get_theme(id: String) -> Result<kairo_core::Theme, String> {
 
 /// Définit le thème actif et met à jour settings.json
 #[tauri::command]
-pub fn set_theme(id: String, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+pub fn set_theme(id: String, window: tauri::Window, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+    use tauri::Emitter;
     let theme = get_theme(id.clone())?;
     let mut settings = state.db.get_app_settings().map_err(|e| e.to_string())?;
-    settings.theme = id;
+    settings.theme = id.clone();
     state.db.save_app_settings(&settings).map_err(|e| e.to_string())?;
-
-    let config_path = std::path::PathBuf::from("config/settings.json");
-    if let Ok(json_str) = serde_json::to_string_pretty(&settings) {
-        let _ = std::fs::write(config_path, json_str);
-    }
+    let _ = window.emit("kairo://theme-changed", &id);
+    let _ = window.emit("kairo://settings-updated", &settings);
     Ok(theme)
 }
 
 /// Sauvegarde les modifications complètes d'un thème (couleurs, disposition, polices)
 #[tauri::command]
-pub fn save_theme(mut theme: kairo_core::Theme, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+pub fn save_theme(mut theme: kairo_core::Theme, window: tauri::Window, state: State<'_, AppState>) -> Result<kairo_core::Theme, String> {
+    use tauri::Emitter;
     let themes_dir = resolve_themes_dir();
     let theme_dir = themes_dir.join(&theme.id);
     let _ = std::fs::create_dir_all(&theme_dir);
@@ -549,12 +559,11 @@ pub fn save_theme(mut theme: kairo_core::Theme, state: State<'_, AppState>) -> R
 
     let mut settings = state.db.get_app_settings().map_err(|e| e.to_string())?;
     settings.theme = theme.id.clone();
-    let _ = state.db.save_app_settings(&settings);
+    state.db.save_app_settings(&settings).map_err(|e| e.to_string())?;
 
-    let config_path = std::path::PathBuf::from("config/settings.json");
-    if let Ok(json_str) = serde_json::to_string_pretty(&settings) {
-        let _ = std::fs::write(config_path, json_str);
-    }
+    let _ = window.emit("kairo://theme-updated", &theme.id);
+    let _ = window.emit("kairo://theme-changed", &theme.id);
+    let _ = window.emit("kairo://settings-updated", &settings);
 
     Ok(theme)
 }
@@ -1133,6 +1142,11 @@ pub fn install_plugin(zip_path: String) -> Result<kairo_core::PluginManifest, St
 }
 
 #[tauri::command]
+pub fn install_plugin_from_url(url: String) -> Result<kairo_core::PluginManifest, String> {
+    kairo_core::PluginManager::stage_plugin_git(&url)
+}
+
+#[tauri::command]
 pub fn confirm_install_plugin(plugin_id: String, state: State<'_, AppState>) -> Result<(), String> {
     state.plugin_manager.confirm_install(&plugin_id)
 }
@@ -1173,5 +1187,13 @@ pub fn open_plugins_folder() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_plugin_contributions(
+    host_id: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<kairo_core::PluginContributionPayload>, String> {
+    Ok(state.plugin_manager.get_contributions_for_host(&host_id))
 }
 
