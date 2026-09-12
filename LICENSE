@@ -1,21 +1,41 @@
-MIT License
-
-Copyright (c) 2026 Flow (Florian) — FlowCreativeStudio <https://github.com/NayrolfRdgs> & KaïroOS Contributors
+KaîroOS Community & Noncommercial License (Version 1.0)
+Copyright (c) 2026 Flow (Florian) — FlowCreativeStudio <https://github.com/NayrolfRdgs> & KaïroOS Contributors.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+of this software and associated documentation files (the "Software"), to use,
+copy, modify, and distribute the Software for NONCOMMERCIAL, PERSONAL, OR
+EDUCATIONAL PURPOSES, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. MANDATORY ATTRIBUTION & INTEGRITY OF BRAND:
+   The above copyright notice, this permission notice, and all original branding,
+   including the name "KaïroOS", official logos, and creator credits, must be
+   preserved and displayed in all copies, redistributions, and user interfaces
+   of the Software. Removing, obscuring, or rebranding the Software (such as
+   white-labeling or presenting it under another name) is strictly prohibited.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. NONCOMMERCIAL RESTRICTION:
+   The Software may NOT be used for any commercial purpose, directly or indirectly,
+   without prior written authorization from the primary author (Flow / FlowCreativeStudio).
+   Commercial purpose includes, but is not limited to:
+   a) Selling, reselling, or renting the Software, or pre-installing it on hardware,
+      arcade cabinets, bartops, or handheld devices intended for sale or paid rental.
+   b) Operating the Software in public or private commercial venues (such as arcade bars,
+      gaming centers, hotels, or events) where access is subject to payment, admission,
+      or mandatory consumption.
+   c) Utilizing the Software with coin-operated mechanisms, token acceptors, bill validators,
+      or electronic payment devices to charge for gameplay or time.
+   d) Providing paid commercial support, customization, or installation services.
+
+3. COMMERCIAO OPERATOR LICENSING:
+   Parties seeking to use, redistribute, or operate the Software for commercial purposes
+   must obtain a separate KaïroOS Commercial Operator License or official partnership
+   agreement. Contact: <contact@kairoos.org> or <https://github.com/KairoOS-Official/KairoOS>.
+
+4. DISCLAIMER OF WARRANTY:
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.

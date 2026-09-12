@@ -4,13 +4,14 @@
 
 # 🕹️ KaïroOS
 
-**Frontend d'arcade custom complet sous Windows, 100% Open Source.**  
+**Frontend d'arcade custom complet sous Windows, gratuit pour usage personnel.**  
 *Conçu pour bornes d'arcade physiques — Navigable à 100% au Joystick/Gamepad — Zéro souris, zéro clavier visible.*
 
 [![Rust](https://img.shields.io/badge/Rust-1.96+-orange.svg?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-v2-blue.svg?style=flat-square&logo=tauri)](https://v2.tauri.app/)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg?style=flat-square&logo=react)](https://react.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](LICENSE)
+[![License: Noncommercial](https://img.shields.io/badge/License-Noncommercial-blue.svg?style=flat-square)](LICENSE)
+[![Pro License](https://img.shields.io/badge/Commercial-KaïroOS_Pro-gold.svg?style=flat-square)](docs/COMMERCIAL_AND_LICENSING.md)
 
 ---
 
@@ -143,8 +144,15 @@ kairo-cli settings          # Gérer les paramètres
 
 ---
 
-## 📄 Licence
+## 📄 Licence & Utilisation Commerciale
 
-Ce projet est distribué sous licence **MIT**. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+- **Usage Personnel & Domicile** : KaïroOS est **100% gratuit et ouvert** (Source-Available) pour les particuliers, amateurs et passionnés de rétrogaming.
+- **Interdiction de Rebranding** : Le nom **KaïroOS**, les logos et les crédits originaux doivent obligatoirement être conservés. Tout white-labeling ou renommage sans accord est strictement interdit.
+- **Usage Commercial & Professionnels** : Toute vente de machine/borne préinstallée, exploitation dans un lieu public payant (bar d'arcade, hôtel, salon) ou borne intégrant un **monnayeur à pièces/jetons** requiert obligatoirement une **Licence Commerciale Opérateur**.
+
+Pour les détails complets, consultez :
+- Le fichier [LICENSE](LICENSE) (KaïroOS Community & Noncommercial License 1.0).
+- Le guide détaillé [Licence, Exploitation Commerciale & Modèle Opérateur](docs/COMMERCIAL_AND_LICENSING.md).
+- Pour toute demande de licence pro / partenariat constructeur : **contact@kairoos.org**.
 
 Créé avec passion par **Flow (Florian) — [FlowCreativeStudio](https://github.com/NayrolfRdgs)** & la communauté KaïroOS.

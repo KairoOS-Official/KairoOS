@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Flow (Florian) — FlowCreativeStudio <https://github.com/NayrolfRdgs>"]
 edition = "2021"
 description = "Core engine for KaïroOS arcade frontend: ROM scanner, SQLite database, CLI emulator launcher, embedded remote HTTP server"
-license = "MIT"
+license = "PolyForm-Noncommercial-1.0.0 OR Commercial"
 
 [dependencies]
 rusqlite = { version = "0.31", features = ["bundled", "chrono", "uuid"] }
