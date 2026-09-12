@@ -68,5 +68,10 @@ docs/*AGENT*.md
 docs/*PHILOSOPHY*.md
 docs/PROMPTS.md
 
+# Plugins installés non-builtin
+plugins/*
+!plugins/kairo-remote/
+!plugins/kairo-scraper/
+
 
 
