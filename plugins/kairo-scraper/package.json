@@ -2,6 +2,7 @@
   "name": "kairo-scraper",
   "private": true,
   "version": "1.0.0",
+  "author": "Flow (Florian) — FlowCreativeStudio (https://github.com/NayrolfRdgs)",
   "type": "module",
   "scripts": {
     "dev": "vite",

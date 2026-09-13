@@ -1,7 +1,7 @@
 {
   "id": "kairo-console",
   "name": "Kaïro Console Launcher",
-  "author": "KaïroOS Team",
+  "author": "Flow (Florian) — FlowCreativeStudio",
   "version": "1.0.0",
   "description": "Layout officiel type Console TV & Steam Big Picture : Hero dynamique grand format avec fanart en fondu, carrousel horizontal centré et barre manette complète.",
   "layout_type": "console_launcher",

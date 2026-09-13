@@ -2,7 +2,7 @@
   "id": "kairo-scraper",
   "name": "KaïroOS Auto Scraper Pro",
   "version": "1.0.0",
-  "author": "KaïroOS Team",
+  "author": "Flow (Florian) — FlowCreativeStudio (https://github.com/NayrolfRdgs)",
   "type": "official",
   "description": "Scraping automatique et par lot des jaquettes, médias et métadonnées via ScreenScraper API",
   "min_kairo_version": "0.1.0",

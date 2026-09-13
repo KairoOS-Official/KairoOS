@@ -2,7 +2,7 @@
   "id": "kairo-remote",
   "name": "KaïroOS Remote",
   "version": "1.0.0",
-  "author": "KaïroOS Team",
+  "author": "Flow (Florian) — FlowCreativeStudio (https://github.com/NayrolfRdgs)",
   "type": "builtin",
   "description": "Contrôle à distance, administration et télécommande mobile via navigateur web",
   "min_kairo_version": "0.1.0",

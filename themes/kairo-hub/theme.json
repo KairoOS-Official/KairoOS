@@ -1,7 +1,7 @@
 {
   "id": "kairo-hub",
   "name": "Kaïro Hub (Plein Écran & Catégories)",
-  "author": "KaïroOS Team",
+  "author": "Flow (Florian) — FlowCreativeStudio",
   "version": "1.0.0",
   "description": "Thème moderne plein écran sans sidebar, avec navigation par rayons horizontaux (Consoles, Modes, Sagas, Favoris)",
   "theme_type": "built-in",
