@@ -75,15 +75,22 @@ Dans l'histoire du rétrogaming, de nombreux constructeurs peu scrupuleux ont ex
 KaïroOS fait le choix d'un **modèle équitable et pérenne** :
 - Si un professionnel gagne sa vie grâce à la qualité de l'interface, la gestion du Kiosk et la fluidité de KaïroOS, **il contribue financièrement au maintien et à l'évolution du logiciel**.
 
-### L'Extension Officielle « KaïroOS Operator »
-Pour répondre aux besoins spécifiques des exploitants de bornes payantes, une suite d'outils professionnels dédiée est proposée :
-- **Pilote universel de monnayeur** : Support des interfaces monnayeurs à impulsions (GPIO, cartes encodeuses USB/série, protocoles ccTalk).
-- **Dashboard de rentabilité** : Suivi précis du nombre de jetons et pièces encaissés par jour, par semaine et par mois.
-- **Statistiques des jeux les plus joués** : Analyse de rentabilité pour savoir quels titres attirent le plus de crédits dans la salle.
-- **Télésurveillance & alertes mobiles** : Suivi de l'état de la borne et des recettes à distance via \kairo-remote\ pour le gérant.
-- **Verrouillage Kiosk inviolable certifié exploitant** : Empêche toute sortie vers le bureau Windows, les réglages sensibles ou l'Explorateur de fichiers.
+### Le Mode Pro dans « kairo-remote » : Gestion Monnayeur & Exploitation
+L'interface de contrôle **kairo-remote** (accessible depuis n'importe quel smartphone, tablette ou navigateur sur le réseau local) propose deux niveaux d'utilisation :
 
-Cette suite est activée par une **clé de licence Opérateur**, délivrée dans le cadre d'un abonnement mensuel/annuel ou d'un palier de mécénat/financement participatif dédié (GitHub Sponsors / Patreon Pro).
+1. **Version Standard (Gratuite pour tous les utilisateurs)** :
+   - Télécommande de navigation et lancement des jeux.
+   - Manette virtuelle tactile (*Virtual Gamepad*).
+   - Réglage du son, mode Kiosk et pilotage de base du système.
+
+2. **Mode Pro (Activé avec la Licence Commerciale Pro)** :
+   - **Configuration du monnayeur** : Prise en charge des monnayeurs à impulsions (pièces, jetons, boutons de crédit exploitant).
+   - **Comptabilité et suivi des recettes** : Nombre de jetons/pièces encaissés en temps réel par machine, par jour et par semaine.
+   - **Statistiques de rentabilité** : Identification des jeux générant le plus de crédits pour optimiser la sélection de la salle.
+   - **Télésurveillance & maintenance** : État de la borne, alertes et supervision discrète à distance directement sur le smartphone du gérant.
+   - **Verrouillage Kiosk inviolable certifié** : Sécurisation absolue de la borne contre toute manipulation de clients.
+
+Ce mode Pro est activé automatiquement sur la borne via une **clé de licence KaïroOS Pro**, délivrée aux constructeurs partenaires et exploitants.
 
 ---
 
