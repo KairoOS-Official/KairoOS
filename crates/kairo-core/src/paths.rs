@@ -72,6 +72,13 @@ impl AppPaths {
         cur
     }
 
+    /// Dossier de données DEV local hermétique (<projet>/.kairo-dev)
+    pub fn get_dev_data_dir() -> PathBuf {
+        let p = Self::get_dev_project_dir().join(".kairo-dev");
+        let _ = std::fs::create_dir_all(&p);
+        p
+    }
+
     /// Dossier AppData de KaïroOS sous Windows (%APPDATA%\kairo-os)
     pub fn get_appdata_dir() -> PathBuf {
         if let Ok(appdata) = std::env::var("APPDATA") {
@@ -83,16 +90,14 @@ impl AppPaths {
         }
     }
 
-    /// Dossier de données de base (`kairo_data` en portable, `%APPDATA%\kairo-os` en normal/dev)
+    /// Dossier de données de base (`kairo_data` en portable, `.kairo-dev` en dev)
     pub fn get_data_dir() -> PathBuf {
         if Self::is_portable() {
             let p = Self::get_exe_dir().join("kairo_data");
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir();
-            let _ = std::fs::create_dir_all(&p);
-            p
+            Self::get_dev_data_dir()
         }
     }
 
@@ -108,9 +113,9 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir().join("config");
+            let p = Self::get_dev_data_dir().join("config");
             let _ = std::fs::create_dir_all(&p);
-            // Si le dossier config dans %APPDATA% est tout neuf, copier les fichiers modèles de base
+            // Si le dossier config dans .kairo-dev est tout neuf, copier les fichiers modèles de base
             let dev_config = Self::get_dev_project_dir().join("config");
             if dev_config.exists() {
                 for file_name in &["settings.json", "gamepads.json", "emulators.json", "remote.json"] {
@@ -170,15 +175,10 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir().join("roms");
-            let _ = std::fs::create_dir_all(&p);
-            // Si le dossier %APPDATA%/kairo-os/roms est vide, copier les roms de test depuis builds/portable/roms si disponible
-            let is_empty = std::fs::read_dir(&p).map(|mut it| it.next().is_none()).unwrap_or(true);
-            if is_empty {
-                let portable_roms = Self::get_dev_project_dir().join("builds").join("portable").join("roms");
-                if portable_roms.exists() {
-                    let _ = Self::copy_dir_recursive(&portable_roms, &p);
-                }
+            let p = Self::get_dev_data_dir().join("roms");
+            if !p.exists() {
+                let _ = std::fs::create_dir_all(&p);
+                Self::log("INFO", "Dossier roms initialisé vide");
             }
             p
         }
@@ -208,7 +208,7 @@ impl AppPaths {
             if dev_emu.exists() {
                 dev_emu
             } else {
-                Self::get_appdata_dir().join("emulators")
+                Self::get_dev_data_dir().join("emulators")
             }
         }
     }
@@ -220,7 +220,7 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir().join("logs");
+            let p = Self::get_dev_data_dir().join("logs");
             let _ = std::fs::create_dir_all(&p);
             p
         }

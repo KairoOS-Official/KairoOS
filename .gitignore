@@ -73,5 +73,5 @@ plugins/*
 !plugins/kairo-remote/
 !plugins/kairo-scraper/
 
-
-
+# Dev local hermétique
+.kairo-dev/

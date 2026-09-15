@@ -332,9 +332,24 @@ mod tests {
     }
 
     #[test]
-    fn test_discover() {
-        let manifests = PluginManager::discover_manifests();
-        println!("FOUND MANIFESTS: {:?}", manifests.iter().map(|(m, p)| (&m.id, p)).collect::<Vec<_>>());
+    fn test_dev_paths_do_not_use_appdata() {
+        assert!(!AppPaths::is_portable());
+        let data_dir = AppPaths::get_data_dir();
+        let config_dir = AppPaths::get_config_dir();
+        let logs_dir = AppPaths::get_logs_dir();
+        let roms_dir = AppPaths::get_default_roms_dir();
+
+        let dev_dir = AppPaths::get_dev_data_dir();
+        assert_eq!(data_dir, dev_dir);
+        assert!(config_dir.starts_with(&dev_dir));
+        assert!(logs_dir.starts_with(&dev_dir));
+        assert!(roms_dir.starts_with(&dev_dir));
+
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let appdata_kairo = PathBuf::from(appdata).join("kairo-os");
+            assert_ne!(data_dir, appdata_kairo);
+            assert!(!data_dir.starts_with(&appdata_kairo));
+        }
     }
 }
 
