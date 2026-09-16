@@ -8,9 +8,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "build:remote": "npm --prefix plugins/kairo-remote run build",
-    "build:scraper": "npm --prefix plugins/kairo-scraper run build",
-    "build:spotify": "npm --prefix plugins/kairo-spotify-screensaver run build",
+    "build:remote": "npm --prefix ../kairos-plugins/official/kairo-remote run build",
+    "build:scraper": "npm --prefix ../kairos-plugins/official/kairo-scraper run build",
+    "build:spotify": "npm --prefix ../kairos-plugins/official/kairo-spotify-screensaver run build",
     "build:plugins": "npm run build:remote && npm run build:scraper && npm run build:spotify",
     "build:portable": "node scripts/build-portable.mjs",
     "build:installer": "tauri build",
