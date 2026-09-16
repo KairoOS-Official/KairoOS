@@ -351,5 +351,21 @@ mod tests {
             assert!(!data_dir.starts_with(&appdata_kairo));
         }
     }
+
+    #[test]
+    fn test_plugin_and_theme_search_dirs_include_live_and_official() {
+        let plugin_dirs = AppPaths::get_plugins_search_dirs();
+        let theme_dirs = AppPaths::get_theme_search_dirs();
+
+        let live_plugins = AppPaths::get_live_dir().join("plugins");
+        let live_themes = AppPaths::get_live_dir().join("themes");
+        let official_plugins = AppPaths::get_studio_root().join("kairos-plugins").join("official");
+        let official_themes = AppPaths::get_studio_root().join("kairos-themes").join("official");
+
+        assert!(plugin_dirs.contains(&live_plugins), "live plugins must be present in search dirs");
+        assert!(plugin_dirs.contains(&official_plugins), "official plugins must be present in search dirs");
+        assert!(theme_dirs.contains(&live_themes), "live themes must be present in search dirs");
+        assert!(theme_dirs.contains(&official_themes), "official themes must be present in search dirs");
+    }
 }
 
