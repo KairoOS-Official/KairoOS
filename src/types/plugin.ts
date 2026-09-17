@@ -49,6 +49,9 @@ export interface PluginManifest {
   settings_section?: PluginSettingsSection;
   settings_schema: Record<string, PluginSettingField>;
   sandbox?: boolean;
+  required?: boolean;
+  dependsOn?: string[];
+  depends_on?: string[];
 }
 
 export interface PluginInfo {
@@ -60,6 +63,8 @@ export interface PluginInfo {
   description: string;
   enabled: boolean;
   running: boolean;
+  required?: boolean;
+  depends_on?: string[];
   permissions: string[];
   commands: string[];
   ui?: string;

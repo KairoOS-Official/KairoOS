@@ -1370,6 +1370,8 @@ async fn remote_get_plugins() -> impl IntoResponse {
                 description: manifest.description,
                 enabled,
                 running: enabled,
+                required: manifest.required,
+                depends_on: manifest.depends_on.clone(),
                 permissions: manifest.permissions,
                 commands: manifest.commands,
                 ui: manifest.ui,

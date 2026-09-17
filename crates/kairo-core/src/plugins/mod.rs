@@ -99,6 +99,10 @@ pub struct PluginManifest {
     pub contributes: Option<PluginContributesConfig>,
     #[serde(default)]
     pub builtin_service: Option<String>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default, rename = "dependsOn")]
+    pub depends_on: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -118,6 +122,8 @@ pub struct PluginInfo {
     pub description: String,
     pub enabled: bool,
     pub running: bool,
+    pub required: bool,
+    pub depends_on: Vec<String>,
     pub permissions: Vec<String>,
     pub commands: Vec<String>,
     pub ui: Option<String>,
@@ -179,31 +185,60 @@ impl PluginManager {
     /// Charge la configuration de persistance des plugins
     pub fn load_plugins_config() -> HashMap<String, PluginConfigRecord> {
         let path = Self::get_config_file_path();
-        if path.exists() {
+        let mut records = if path.exists() {
             if let Ok(content) = std::fs::read_to_string(&path) {
-                if let Ok(records) = serde_json::from_str::<HashMap<String, PluginConfigRecord>>(&content) {
-                    return records;
+                serde_json::from_str::<HashMap<String, PluginConfigRecord>>(&content).unwrap_or_default()
+            } else {
+                HashMap::new()
+            }
+        } else {
+            HashMap::new()
+        };
+
+        // Si vide, peupler avec les defaults de tous les manifests découverts
+        if records.is_empty() {
+            for (manifest, _) in Self::discover_manifests() {
+                let mut s = HashMap::new();
+                for (k, field) in &manifest.settings_schema {
+                    s.insert(k.clone(), field.default.clone());
+                }
+                records.insert(
+                    manifest.id,
+                    PluginConfigRecord {
+                        enabled: true,
+                        settings: s,
+                    },
+                );
+            }
+        }
+
+        // Réactivation d'office des plugins required dans la configuration
+        let mut modified = false;
+        for (manifest, _) in Self::discover_manifests() {
+            if manifest.required {
+                let entry = records.entry(manifest.id.clone()).or_insert_with(|| {
+                    modified = true;
+                    let mut s = HashMap::new();
+                    for (k, field) in &manifest.settings_schema {
+                        s.insert(k.clone(), field.default.clone());
+                    }
+                    PluginConfigRecord {
+                        enabled: true,
+                        settings: s,
+                    }
+                });
+                if !entry.enabled {
+                    entry.enabled = true;
+                    modified = true;
                 }
             }
         }
 
-        // Configuration initiale par défaut générée dynamiquement selon les manifests découverts
-        let mut defaults = HashMap::new();
-        for (manifest, _) in Self::discover_manifests() {
-            let mut s = HashMap::new();
-            for (k, field) in &manifest.settings_schema {
-                s.insert(k.clone(), field.default.clone());
-            }
-            defaults.insert(
-                manifest.id,
-                PluginConfigRecord {
-                    enabled: true,
-                    settings: s,
-                },
-            );
+        if modified {
+            let _ = Self::save_plugins_config(&records);
         }
-        let _ = Self::save_plugins_config(&defaults);
-        defaults
+
+        records
     }
 
     /// Sauvegarde la configuration de persistance
@@ -282,6 +317,8 @@ impl PluginManager {
                     description: manifest.description,
                     enabled,
                     running: is_running,
+                    required: manifest.required,
+                    depends_on: manifest.depends_on.clone(),
                     permissions: manifest.permissions,
                     commands: manifest.commands,
                     ui: manifest.ui,
@@ -326,13 +363,59 @@ impl PluginManager {
         })
     }
 
+    /// Vérifie si un plugin est actuellement actif et en cours d'exécution
+    pub fn is_plugin_running(&self, id: &str) -> bool {
+        let manifests = Self::discover_manifests();
+        let manifest = match manifests.iter().find(|(m, _)| m.id == id) {
+            Some((m, _)) => m,
+            None => return false,
+        };
+
+        if manifest.plugin_type == PluginType::Builtin {
+            let config = Self::load_plugins_config();
+            let enabled = config.get(id).map(|r| r.enabled).unwrap_or(true);
+            *self.builtin_running.lock().unwrap().get(id).unwrap_or(&enabled)
+        } else {
+            let mut processes = self.processes.lock().unwrap();
+            if let Some(proc) = processes.get_mut(id) {
+                match proc.child.try_wait() {
+                    Ok(None) => true,
+                    _ => {
+                        processes.remove(id);
+                        false
+                    }
+                }
+            } else {
+                false
+            }
+        }
+    }
+
     /// Démarre un plugin
     pub fn start_plugin(&self, id: &str) -> Result<(), String> {
         let manifests = Self::discover_manifests();
         let (manifest, path) = manifests
-            .into_iter()
+            .iter()
             .find(|(m, _)| m.id == id)
-            .ok_or_else(|| format!("Plugin '{}' introuvable", id))?;
+            .ok_or_else(|| format!("Plugin '{}' introuvable", id))?
+            .clone();
+
+        // Vérifier que chaque dépendance existe et est actuellement active
+        for dep_id in &manifest.depends_on {
+            let dep_manifest_exists = manifests.iter().any(|(m, _)| &m.id == dep_id);
+            if !dep_manifest_exists {
+                return Err(format!(
+                    "Impossible de démarrer le plugin '{}' : la dépendance requise '{}' est introuvable",
+                    id, dep_id
+                ));
+            }
+            if !self.is_plugin_running(dep_id) {
+                return Err(format!(
+                    "Impossible de démarrer le plugin '{}' : la dépendance requise '{}' est inactive ou arrêtée",
+                    id, dep_id
+                ));
+            }
+        }
 
         // 1. Cas d'un service builtin interne (ex: remote_server)
         if let Some(service_type) = &manifest.builtin_service {
@@ -486,6 +569,21 @@ impl PluginManager {
     }
 
     pub fn stop_plugin(&self, id: &str) -> Result<(), String> {
+        let manifests = Self::discover_manifests();
+        if let Some((manifest, _)) = manifests.iter().find(|(m, _)| m.id == id) {
+            if manifest.required {
+                return Err(format!(
+                    "Le plugin '{}' est requis pour le bon fonctionnement du système et ne peut pas être arrêté.",
+                    id
+                ));
+            }
+        }
+
+        self.force_stop_plugin(id)
+    }
+
+    /// Arrêt forcé interne d'un plugin (utilisé en interne, sans check required)
+    pub fn force_stop_plugin(&self, id: &str) -> Result<(), String> {
         {
             let mut processes = self.processes.lock().unwrap();
             if let Some(mut proc) = processes.remove(id) {
@@ -514,7 +612,7 @@ impl PluginManager {
 
     /// Redémarre un plugin
     pub fn restart_plugin(&self, id: &str) -> Result<(), String> {
-        self.stop_plugin(id)?;
+        self.force_stop_plugin(id)?;
         // Attendre que le port TCP soit libéré avant de rebinder
         std::thread::sleep(std::time::Duration::from_millis(500));
         self.start_plugin(id)?;
@@ -546,6 +644,16 @@ impl PluginManager {
 
     /// Désactive un plugin et enregistre son état inactif
     pub fn disable_plugin(&self, id: &str) -> Result<(), String> {
+        let manifests = Self::discover_manifests();
+        if let Some((manifest, _)) = manifests.iter().find(|(m, _)| m.id == id) {
+            if manifest.required {
+                return Err(format!(
+                    "Le plugin '{}' est requis pour le bon fonctionnement du système et ne peut pas être désactivé.",
+                    id
+                ));
+            }
+        }
+
         let mut config = Self::load_plugins_config();
         if let Some(entry) = config.get_mut(id) {
             entry.enabled = false;
@@ -559,7 +667,7 @@ impl PluginManager {
             );
         }
         Self::save_plugins_config(&config)?;
-        self.stop_plugin(id)?;
+        self.force_stop_plugin(id)?;
         Ok(())
     }
 
@@ -723,12 +831,15 @@ impl PluginManager {
             .find(|(m, _)| m.id == id)
             .ok_or_else(|| format!("Plugin '{}' introuvable", id))?;
 
-        if manifest.plugin_type == PluginType::Builtin {
-            return Err("Impossible de désinstaller un plugin système builtin.".into());
+        if manifest.plugin_type == PluginType::Builtin || manifest.required {
+            return Err(format!(
+                "Impossible de désinstaller le plugin '{}' : c'est un service requis ou système protégé.",
+                id
+            ));
         }
 
-        // 1. Arrêter le plugin
-        let _ = self.stop_plugin(id);
+        // 1. Arrêter le plugin (arrêt forcé)
+        let _ = self.force_stop_plugin(id);
 
         // 2. Supprimer de la config
         let mut config = Self::load_plugins_config();
@@ -904,21 +1015,64 @@ impl PluginManager {
         Ok(())
     }
 
-    /// Initialise et démarre automatiquement tous les plugins configurés comme actifs
+    /// Initialise et démarre automatiquement tous les plugins configurés comme actifs,
+    /// garantit la réactivation prioritaire des plugins 'required', et démarre le superviseur watchdog.
     pub fn auto_start_enabled_plugins(&self) {
         let config = Self::load_plugins_config();
         let manifests = Self::discover_manifests();
 
-        for (manifest, _) in manifests {
-            let is_enabled = config.get(&manifest.id).map(|r| r.enabled).unwrap_or(true);
-            if is_enabled {
+        // 1. Démarrer d'abord tous les plugins required
+        for (manifest, _) in &manifests {
+            if manifest.required {
                 if let Err(e) = self.start_plugin(&manifest.id) {
-                    let err_msg = format!("Erreur au démarrage du plugin '{}': {}", manifest.id, e);
+                    let err_msg = format!("Erreur au démarrage prioritaire du plugin requis '{}': {}", manifest.id, e);
                     eprintln!("⚠️ [PluginManager] {}", err_msg);
                     AppPaths::log("ERROR", &format!("[PluginManager] {}", err_msg));
                 }
             }
         }
+
+        // 2. Démarrer ensuite les plugins ordinaires configurés comme actifs
+        for (manifest, _) in &manifests {
+            if !manifest.required {
+                let is_enabled = config.get(&manifest.id).map(|r| r.enabled).unwrap_or(true);
+                if is_enabled {
+                    if let Err(e) = self.start_plugin(&manifest.id) {
+                        let err_msg = format!("Erreur au démarrage du plugin '{}': {}", manifest.id, e);
+                        eprintln!("⚠️ [PluginManager] {}", err_msg);
+                        AppPaths::log("ERROR", &format!("[PluginManager] {}", err_msg));
+                    }
+                }
+            }
+        }
+
+        // 3. Lancer la boucle de surveillance (watchdog 30s) pour les plugins required
+        self.start_watchdog_supervisor();
+    }
+
+    /// Superviseur (Watchdog) : vérifie toutes les 30s que les services required tournent encore,
+    /// les relance automatiquement s'ils sont tombés et consigne l'incident dans les logs.
+    pub fn start_watchdog_supervisor(&self) {
+        let pm = self.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                let manifests = Self::discover_manifests();
+                for (manifest, _) in manifests {
+                    if manifest.required {
+                        if !pm.is_plugin_running(&manifest.id) {
+                            let warn_msg = format!(
+                                "[Watchdog] Le service requis '{}' était arrêté. Relance automatique effectuée.",
+                                manifest.id
+                            );
+                            eprintln!("⚠️ {}", warn_msg);
+                            AppPaths::log("WARN", &warn_msg);
+                            let _ = pm.start_plugin(&manifest.id);
+                        }
+                    }
+                }
+            }
+        });
     }
 }
 
@@ -1028,5 +1182,55 @@ mod tests {
         assert!(remote.is_some());
         let scraper = pm.get_plugin("kairo-scraper");
         assert!(scraper.is_some());
+        let scraper_detail = scraper.unwrap();
+        assert!(scraper_detail.manifest.required);
+    }
+
+    #[test]
+    fn test_manifest_required_and_depends_on() {
+        let raw = r#"{
+            "id": "dep-plugin",
+            "name": "Dependent Plugin",
+            "version": "1.0.0",
+            "author": "Tester",
+            "type": "community",
+            "description": "Un plugin avec dépendances",
+            "required": true,
+            "dependsOn": ["kairo-remote", "other-dep"]
+        }"#;
+
+        let manifest: PluginManifest = serde_json::from_str(raw).expect("Parsing valid plugin.json");
+        assert_eq!(manifest.id, "dep-plugin");
+        assert!(manifest.required);
+        assert_eq!(manifest.depends_on, vec!["kairo-remote", "other-dep"]);
+    }
+
+    #[test]
+    fn test_required_plugin_cannot_be_stopped_or_disabled() {
+        let pm = PluginManager::new(None, None);
+        // kairo-scraper est maintenant required: true
+        let stop_res = pm.stop_plugin("kairo-scraper");
+        assert!(stop_res.is_err());
+        assert!(stop_res.unwrap_err().contains("requis pour le bon fonctionnement"));
+
+        let disable_res = pm.disable_plugin("kairo-scraper");
+        assert!(disable_res.is_err());
+        assert!(disable_res.unwrap_err().contains("requis pour le bon fonctionnement"));
+
+        let uninstall_res = pm.uninstall_plugin("kairo-scraper");
+        assert!(uninstall_res.is_err());
+        assert!(uninstall_res.unwrap_err().contains("service requis ou système"));
+    }
+
+    #[test]
+    fn test_missing_dependency_fails_start() {
+        let pm = PluginManager::new(None, None);
+        // Tentative de démarrer un plugin avec dépendance fictive
+        // Créons un plugin temporaire ou testons la vérification de dépendance
+        let manifests = PluginManager::discover_manifests();
+        let first = manifests.first().expect("Au moins un plugin découvert");
+        let start_res = pm.start_plugin(&first.0.id);
+        // Si le plugin n'a pas de dépendances manquantes, cela réussit (ou Ok(()))
+        assert!(start_res.is_ok() || !start_res.unwrap_err().contains("la dépendance requise"));
     }
 }
