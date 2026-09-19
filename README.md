@@ -7,11 +7,16 @@
 **Frontend d'arcade custom complet sous Windows, gratuit pour usage personnel.**  
 *Conçu pour bornes d'arcade physiques — Navigable à 100% au Joystick/Gamepad — Zéro souris, zéro clavier visible.*
 
+[![Website](https://img.shields.io/badge/Website-kairo--arcade.onrender.com-6366F1?style=flat-square&logo=googlechrome&logoColor=white)](https://kairo-arcade.onrender.com/)
+[![Démo Interactive](https://img.shields.io/badge/Démo_Interactive-Tester_en_Ligne-00DC82?style=flat-square&logo=render&logoColor=white)](https://kairo-arcade.onrender.com/)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-orange.svg?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-v2-blue.svg?style=flat-square&logo=tauri)](https://v2.tauri.app/)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg?style=flat-square&logo=react)](https://react.dev/)
 [![License: Noncommercial](https://img.shields.io/badge/License-Noncommercial-blue.svg?style=flat-square)](LICENSE)
 [![Pro License](https://img.shields.io/badge/Commercial-KaïroOS_Pro-gold.svg?style=flat-square)](docs/COMMERCIAL_AND_LICENSING.md)
+
+> ### 🕹️ [👉 Découvrir la Vitrine Officielle & Démo Interactive : kairo-arcade.onrender.com 👈](https://kairo-arcade.onrender.com/)
+> Testez l'interface arcade sans installation, explorez les thèmes avec le simulateur CRT et votez sur la feuille de route communautaire !
 
 ---
 
