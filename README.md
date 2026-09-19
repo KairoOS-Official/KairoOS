@@ -153,6 +153,6 @@ kairo-cli settings          # Gérer les paramètres
 Pour les détails complets, consultez :
 - Le fichier [LICENSE](LICENSE) (KaïroOS Community & Noncommercial License 1.0).
 - Le guide détaillé [Licence, Exploitation Commerciale & Modèle Opérateur](docs/COMMERCIAL_AND_LICENSING.md).
-- Pour toute demande de licence pro / partenariat constructeur : **contact@kairoos.org**.
+- Pour toute demande de licence pro / partenariat constructeur :.
 
 Créé avec passion par **Flow (Florian) — [FlowCreativeStudio](https://github.com/NayrolfRdgs)** & la communauté KaïroOS.
