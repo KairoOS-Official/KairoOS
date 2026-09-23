@@ -25,6 +25,8 @@ impl AppPaths {
                     || parent_str.contains("target/debug")
                     || parent_str.contains("target\\release")
                     || parent_str.contains("target/release")
+                    || parent_str.contains("builds\\target")
+                    || parent_str.contains("builds/target")
                     || parent_str.contains(".kairo_target")
                 {
                     return false;
@@ -83,25 +85,20 @@ impl AppPaths {
         Self::get_studio_root().join(".live")
     }
 
-    /// Dossier de données DEV local hermétique (<projet>/.kairo-dev)
+    /// Dossier de données DEV local hermétique (<studio>/.live/appdata)
     pub fn get_dev_data_dir() -> PathBuf {
-        let p = Self::get_dev_project_dir().join(".kairo-dev");
+        let p = Self::get_live_dir().join("appdata");
         let _ = std::fs::create_dir_all(&p);
         p
     }
 
-    /// Dossier AppData de KaïroOS sous Windows (%APPDATA%\kairo-os)
+    /// Dossier sandbox local de KaïroOS (<studio>/.live/appdata)
+    /// Strictement zéro utilisation de %APPDATA% Windows
     pub fn get_appdata_dir() -> PathBuf {
-        if let Ok(appdata) = std::env::var("APPDATA") {
-            PathBuf::from(appdata).join("kairo-os")
-        } else if let Ok(userprofile) = std::env::var("USERPROFILE") {
-            PathBuf::from(userprofile).join(".kairo-os")
-        } else {
-            PathBuf::from("./kairo_data")
-        }
+        Self::get_dev_data_dir()
     }
 
-    /// Dossier de données de base (`kairo_data` en portable, `.kairo-dev` en dev)
+    /// Dossier de données de base (`kairo_data` en portable, `.live/appdata` en dev)
     pub fn get_data_dir() -> PathBuf {
         if Self::is_portable() {
             let p = Self::get_exe_dir().join("kairo_data");
@@ -226,6 +223,11 @@ impl AppPaths {
         if Self::is_portable() {
             Self::get_exe_dir().join("emulators")
         } else {
+            // En mode dev, si .live/emulators existe, on le priorise pour les tests locaux
+            let live_emu = Self::get_live_dir().join("emulators");
+            if live_emu.exists() {
+                return live_emu;
+            }
             let dev_emu = Self::get_dev_project_dir().join("emulators");
             if dev_emu.exists() {
                 dev_emu
@@ -233,6 +235,36 @@ impl AppPaths {
                 Self::get_dev_data_dir().join("emulators")
             }
         }
+    }
+
+    /// Liste ordonnée des dossiers où chercher les émulateurs :
+    /// 1. Si en portable : portable/emulators
+    /// 2. Si en dev :
+    ///    a. .live/emulators (prioritaire en dev pour les tests locaux)
+    ///    b. Kairo/emulators (dossier du projet)
+    ///    c. .kairo-dev/emulators
+    pub fn get_emulator_search_dirs() -> Vec<PathBuf> {
+        let mut dirs = Vec::new();
+        if Self::is_portable() {
+            dirs.push(Self::get_exe_dir().join("emulators"));
+        } else {
+            // 1. .live/emulators (WIP dev / tests rapides)
+            let live_emu = Self::get_live_dir().join("emulators");
+            if live_emu.exists() {
+                dirs.push(live_emu);
+            }
+            // 2. Kairo/emulators
+            let dev_emu = Self::get_dev_project_dir().join("emulators");
+            if dev_emu.exists() && !dirs.contains(&dev_emu) {
+                dirs.push(dev_emu);
+            }
+            // 3. .kairo-dev/emulators
+            let data_emu = Self::get_dev_data_dir().join("emulators");
+            if !dirs.contains(&data_emu) {
+                dirs.push(data_emu);
+            }
+        }
+        dirs
     }
 
     /// Dossier des journaux (logs)

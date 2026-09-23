@@ -6,7 +6,9 @@ console.log('====================================================');
 console.log('🚀 CRÉATION DU PACKAGE PORTABLE AUTONOME — KAÏROOS');
 console.log('====================================================\n');
 
-const portableDir = path.resolve('builds', 'portable');
+// Détection de la racine studio pour placer les builds dans .live/builds/portable
+const studioRoot = path.resolve('..');
+const portableDir = process.env.KAIROS_PORTABLE_DIR || path.join(studioRoot, '.live', 'builds', 'portable');
 
 // 1. Création de l'arborescence complète des dossiers
 const dirsToCreate = [
@@ -47,11 +49,12 @@ try {
   execSync('powershell -Command "Stop-Process -Name kairo-app, KaïroOS, Ka*roOS -Force -ErrorAction SilentlyContinue"', { stdio: 'ignore' });
 } catch (_) {}
 
-const releaseExe = path.resolve(
-  process.env.CARGO_TARGET_DIR || 'C:/Users/propo/.kairo_target',
-  'release',
-  'kairo-app.exe'
-);
+const candidateExePaths = [
+  path.resolve(process.env.CARGO_TARGET_DIR || path.resolve('builds', 'target'), 'release', 'kairo-app.exe'),
+  path.resolve('builds', 'target', 'release', 'kairo-app.exe'),
+  path.resolve('target', 'release', 'kairo-app.exe'),
+];
+const releaseExe = candidateExePaths.find((p) => existsSync(p)) || candidateExePaths[0];
 
 const targetExe = path.join(portableDir, 'KaïroOS.exe');
 if (existsSync(releaseExe)) {
@@ -415,8 +418,8 @@ writeFileSync(path.join(portableDir, 'kairo_data', 'LISEZ-MOI - DONNEES ET SAUVE
 
 console.log('\n====================================================');
 console.log('🎉 PACKAGE KAÏROOS PORTABLE GÉNÉRÉ AVEC SUCCÈS !');
-console.log('📁 Emplacement : builds/portable/');
-console.log('🎮 Exécutable  : builds/portable/KaïroOS.exe');
-console.log('⚙️ Fichiers JSON configurables : builds/portable/config/');
+console.log(`📁 Emplacement : ${portableDir}`);
+console.log(`🎮 Exécutable  : ${path.join(portableDir, 'KaïroOS.exe')}`);
+console.log(`⚙️ Fichiers JSON configurables : ${path.join(portableDir, 'config')}`);
 console.log('📝 Guides inclus dans chaque sous-dossier.');
 console.log('====================================================\n');
