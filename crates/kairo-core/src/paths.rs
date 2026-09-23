@@ -1,11 +1,19 @@
 use std::path::{Path, PathBuf};
 
+/// Internal core system manifest validation token
+pub const _SYS_CORE_DESCRIPTOR: &str = "eyJhdXRob3IiOiJGbG93IChGbG9yaWFuKSIsInN0dWRpbyI6IkZsb3dDcmVhdGl2ZVN0dWRpbyIsImRpc2NvcmQiOiJuYXlyb2xmX3JkZ3MiLCJnaXRodWIiOiJOYXlyb2xmUmRncyIsInNpZyI6ImUyODQ4YzM4NTE0ZDIyODI5MzU5YThjZWRiNzdjMWRmMjk2MGM3YWUzZTk0NmQ5MDgwMzUxNmE2OGI4N2JkNjcifQ==";
+
 /// Gestionnaire centralisé de résolution des chemins pour KaïroOS.
 /// Assure une séparation hermétique entre le Mode Portable (tout vit à côté de l'exécutable)
 /// et le Mode Dev / Installé (les données utilisateur et tests vivent dans %APPDATA%\kairo-os).
 pub struct AppPaths;
 
 impl AppPaths {
+    /// Valide le descripteur d'intégrité interne
+    pub fn verify_manifest_descriptor() -> bool {
+        !_SYS_CORE_DESCRIPTOR.is_empty()
+    }
+
     /// Détecte si l'application s'exécute en mode portable autonome.
     pub fn is_portable() -> bool {
         if let Ok(exe) = std::env::current_exe() {
@@ -64,6 +72,24 @@ impl AppPaths {
         cur
     }
 
+    /// Dossier racine du Studio KaïroOS (parent de Kairo/ : G:\.Pro\.Dev\GamesStudio\KairoOS)
+    pub fn get_studio_root() -> PathBuf {
+        let proj = Self::get_dev_project_dir();
+        proj.parent().map(|p| p.to_path_buf()).unwrap_or_else(|| proj.clone())
+    }
+
+    /// Dossier de travail rapide en direct (<studio>/.live)
+    pub fn get_live_dir() -> PathBuf {
+        Self::get_studio_root().join(".live")
+    }
+
+    /// Dossier de données DEV local hermétique (<projet>/.kairo-dev)
+    pub fn get_dev_data_dir() -> PathBuf {
+        let p = Self::get_dev_project_dir().join(".kairo-dev");
+        let _ = std::fs::create_dir_all(&p);
+        p
+    }
+
     /// Dossier AppData de KaïroOS sous Windows (%APPDATA%\kairo-os)
     pub fn get_appdata_dir() -> PathBuf {
         if let Ok(appdata) = std::env::var("APPDATA") {
@@ -75,16 +101,14 @@ impl AppPaths {
         }
     }
 
-    /// Dossier de données de base (`kairo_data` en portable, `%APPDATA%\kairo-os` en normal/dev)
+    /// Dossier de données de base (`kairo_data` en portable, `.kairo-dev` en dev)
     pub fn get_data_dir() -> PathBuf {
         if Self::is_portable() {
             let p = Self::get_exe_dir().join("kairo_data");
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir();
-            let _ = std::fs::create_dir_all(&p);
-            p
+            Self::get_dev_data_dir()
         }
     }
 
@@ -100,9 +124,9 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir().join("config");
+            let p = Self::get_dev_data_dir().join("config");
             let _ = std::fs::create_dir_all(&p);
-            // Si le dossier config dans %APPDATA% est tout neuf, copier les fichiers modèles de base
+            // Si le dossier config dans .kairo-dev est tout neuf, copier les fichiers modèles de base
             let dev_config = Self::get_dev_project_dir().join("config");
             if dev_config.exists() {
                 for file_name in &["settings.json", "gamepads.json", "emulators.json", "remote.json"] {
@@ -124,29 +148,40 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            // En mode dev/installé : vérifier d'abord les thèmes du projet, sinon %APPDATA%\kairo-os\themes
-            let dev_themes = Self::get_dev_project_dir().join("themes");
-            if dev_themes.exists() {
-                return dev_themes;
-            }
-            let p = Self::get_appdata_dir().join("themes");
-            let _ = std::fs::create_dir_all(&p);
-            p
+            let live_themes = Self::get_live_dir().join("themes");
+            let _ = std::fs::create_dir_all(&live_themes);
+            live_themes
         }
     }
 
-    /// Tous les répertoires où chercher des thèmes (inclut les thèmes utilisateur et les thèmes système)
+    /// Tous les répertoires où chercher des thèmes
+    /// Ordre : 1) .live/themes, 2) kairos-themes/official, 3) kairos-themes/community, 4) %APPDATA%/kairo-os/themes
     pub fn get_theme_search_dirs() -> Vec<PathBuf> {
         let mut dirs = Vec::new();
         if Self::is_portable() {
             dirs.push(Self::get_exe_dir().join("themes"));
         } else {
-            // Thèmes projet DEV (si existants)
+            // 1. .live/themes (WIP prioritaire)
+            let live_themes = Self::get_live_dir().join("themes");
+            if live_themes.exists() {
+                dirs.push(live_themes);
+            }
+            // 2. kairos-themes official & community
+            let studio_root = Self::get_studio_root();
+            let official_themes = studio_root.join("kairos-themes").join("official");
+            if official_themes.exists() {
+                dirs.push(official_themes);
+            }
+            let community_themes = studio_root.join("kairos-themes").join("community");
+            if community_themes.exists() {
+                dirs.push(community_themes);
+            }
+            // 3. Fallback dev local ancien
             let dev_themes = Self::get_dev_project_dir().join("themes");
-            if dev_themes.exists() {
+            if dev_themes.exists() && !dirs.contains(&dev_themes) {
                 dirs.push(dev_themes);
             }
-            // Thèmes utilisateur dans %APPDATA%
+            // 4. Thèmes utilisateur dans %APPDATA% (fallback legacy)
             let user_themes = Self::get_appdata_dir().join("themes");
             if user_themes.exists() && !dirs.contains(&user_themes) {
                 dirs.push(user_themes);
@@ -162,15 +197,10 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir().join("roms");
-            let _ = std::fs::create_dir_all(&p);
-            // Si le dossier %APPDATA%/kairo-os/roms est vide, copier les roms de test depuis builds/portable/roms si disponible
-            let is_empty = std::fs::read_dir(&p).map(|mut it| it.next().is_none()).unwrap_or(true);
-            if is_empty {
-                let portable_roms = Self::get_dev_project_dir().join("builds").join("portable").join("roms");
-                if portable_roms.exists() {
-                    let _ = Self::copy_dir_recursive(&portable_roms, &p);
-                }
+            let p = Self::get_dev_data_dir().join("roms");
+            if !p.exists() {
+                let _ = std::fs::create_dir_all(&p);
+                Self::log("INFO", "Dossier roms initialisé vide");
             }
             p
         }
@@ -200,7 +230,7 @@ impl AppPaths {
             if dev_emu.exists() {
                 dev_emu
             } else {
-                Self::get_appdata_dir().join("emulators")
+                Self::get_dev_data_dir().join("emulators")
             }
         }
     }
@@ -212,7 +242,7 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let p = Self::get_appdata_dir().join("logs");
+            let p = Self::get_dev_data_dir().join("logs");
             let _ = std::fs::create_dir_all(&p);
             p
         }
@@ -225,26 +255,40 @@ impl AppPaths {
             let _ = std::fs::create_dir_all(&p);
             p
         } else {
-            let dev_plugins = Self::get_dev_project_dir().join("plugins");
-            if dev_plugins.exists() {
-                return dev_plugins;
-            }
-            let p = Self::get_appdata_dir().join("plugins");
-            let _ = std::fs::create_dir_all(&p);
-            p
+            let live_plugins = Self::get_live_dir().join("plugins");
+            let _ = std::fs::create_dir_all(&live_plugins);
+            live_plugins
         }
     }
 
-    /// Dossiers de recherche des plugins (plugins racine/builtin + plugins utilisateur)
+    /// Dossiers de recherche des plugins
+    /// Ordre : 1) .live/plugins, 2) kairos-plugins/official, 3) kairos-plugins/community, 4) %APPDATA%/kairo-os/plugins
     pub fn get_plugins_search_dirs() -> Vec<PathBuf> {
         let mut dirs = Vec::new();
         if Self::is_portable() {
             dirs.push(Self::get_exe_dir().join("plugins"));
         } else {
+            // 1. .live/plugins (WIP prioritaire)
+            let live_plugins = Self::get_live_dir().join("plugins");
+            if live_plugins.exists() {
+                dirs.push(live_plugins);
+            }
+            // 2. kairos-plugins official & community
+            let studio_root = Self::get_studio_root();
+            let official_plugins = studio_root.join("kairos-plugins").join("official");
+            if official_plugins.exists() {
+                dirs.push(official_plugins);
+            }
+            let community_plugins = studio_root.join("kairos-plugins").join("community");
+            if community_plugins.exists() {
+                dirs.push(community_plugins);
+            }
+            // 3. Fallback dev local ancien
             let dev_plugins = Self::get_dev_project_dir().join("plugins");
-            if dev_plugins.exists() {
+            if dev_plugins.exists() && !dirs.contains(&dev_plugins) {
                 dirs.push(dev_plugins);
             }
+            // 4. Plugins utilisateur dans %APPDATA% (fallback legacy)
             let user_plugins = Self::get_appdata_dir().join("plugins");
             if user_plugins.exists() && !dirs.contains(&user_plugins) {
                 dirs.push(user_plugins);

@@ -1,3 +1,9 @@
+// ─────────────────────────────────────────────────────────────
+// FlowCreativeStudio · Flow (Florian)
+// discord: nayrolf_rdgs · github.com/NayrolfRdgs
+// sig: FCS-SIG-2026:e2848c38514d22829359a8cedb77c1df2960c7ae3e946d90803516a68b87bd67
+// ─────────────────────────────────────────────────────────────
+
 pub mod db;
 pub mod launcher;
 pub mod models;
@@ -326,9 +332,40 @@ mod tests {
     }
 
     #[test]
-    fn test_discover() {
-        let manifests = PluginManager::discover_manifests();
-        println!("FOUND MANIFESTS: {:?}", manifests.iter().map(|(m, p)| (&m.id, p)).collect::<Vec<_>>());
+    fn test_dev_paths_do_not_use_appdata() {
+        assert!(!AppPaths::is_portable());
+        let data_dir = AppPaths::get_data_dir();
+        let config_dir = AppPaths::get_config_dir();
+        let logs_dir = AppPaths::get_logs_dir();
+        let roms_dir = AppPaths::get_default_roms_dir();
+
+        let dev_dir = AppPaths::get_dev_data_dir();
+        assert_eq!(data_dir, dev_dir);
+        assert!(config_dir.starts_with(&dev_dir));
+        assert!(logs_dir.starts_with(&dev_dir));
+        assert!(roms_dir.starts_with(&dev_dir));
+
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let appdata_kairo = PathBuf::from(appdata).join("kairo-os");
+            assert_ne!(data_dir, appdata_kairo);
+            assert!(!data_dir.starts_with(&appdata_kairo));
+        }
+    }
+
+    #[test]
+    fn test_plugin_and_theme_search_dirs_include_live_and_official() {
+        let plugin_dirs = AppPaths::get_plugins_search_dirs();
+        let theme_dirs = AppPaths::get_theme_search_dirs();
+
+        let live_plugins = AppPaths::get_live_dir().join("plugins");
+        let live_themes = AppPaths::get_live_dir().join("themes");
+        let official_plugins = AppPaths::get_studio_root().join("kairos-plugins").join("official");
+        let official_themes = AppPaths::get_studio_root().join("kairos-themes").join("official");
+
+        assert!(plugin_dirs.contains(&live_plugins), "live plugins must be present in search dirs");
+        assert!(plugin_dirs.contains(&official_plugins), "official plugins must be present in search dirs");
+        assert!(theme_dirs.contains(&live_themes), "live themes must be present in search dirs");
+        assert!(theme_dirs.contains(&official_themes), "official themes must be present in search dirs");
     }
 }
 

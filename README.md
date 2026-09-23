@@ -60,9 +60,10 @@ Kaïro/
 
 Pour approfondir le fonctionnement, l'architecture et les guides pratiques, consultez les documents du dossier [`docs/`](docs/) :
 
-- 🗺️ **[Feuille de Route & Roadmap](docs/ROADMAP.md)** : État d'avancement des fonctionnalités, ce qui est accompli et les jalons futurs (v0.2.0, v0.3.0, v1.0.0).
+- 🗺️ **[Feuille de Route & Roadmap](https://github.com/KairoOS-Official/.github/blob/main/ROADMAP.md)** : Feuille de route officielle centralisée de l'écosystème (v0.2.0, v0.3.0, v1.0.0).
 - 🛠️ **[Guide de Compilation & Commandes Console](docs/BUILDING.md)** : Comment compiler le package portable (`npm run build:portable`), l'installateur Windows, les tests Rust (`cargo test`) et les commandes de développement.
-- 🎨 **[Architecture & Guide des Thèmes](docs/THEMES.md)** : Layouts structurels officiels (`kairo-default`, `kairo-hub`, `kairo-console`), création de thèmes, variables CSS, Community Store et raccourci d'urgence.
+- 🔌 **[Guide de Développement des Plugins](https://github.com/KairoOS-Official/kairos-plugins/blob/main/PLUGIN_GUIDE.md)** : Conception d'extensions multi-langages, protocole standardisé `stdin/stdout JSON` et sandbox.
+- 🎨 **[Architecture & Guide des Thèmes](https://github.com/KairoOS-Official/kairos-themes/blob/main/THEME_GUIDE.md)** : Layouts structurels officiels (`kairo-default`, `kairo-hub`, `kairo-console`), variables CSS et simulateur CRT.
 - 🐛 **[Guide de Débogage & Dépannage](docs/DEBUGGING.md)** : Emplacement des logs, diagnostic du lancement des émulateurs, inspection de la base SQLite et raccourcis clavier de secours.
 - 🌍 **[Guide Cross-Platform](docs/CROSS_PLATFORM.md)** : Adaptations pour Linux, macOS, Android et le binaire CLI (dépendances, structure, checklist).
 
@@ -158,6 +159,13 @@ kairo-cli settings          # Gérer les paramètres
 Pour les détails complets, consultez :
 - Le fichier [LICENSE](LICENSE) (KaïroOS Community & Noncommercial License 1.0).
 - Le guide détaillé [Licence, Exploitation Commerciale & Modèle Opérateur](docs/COMMERCIAL_AND_LICENSING.md).
-- Pour toute demande de licence pro / partenariat constructeur :.
+- Pour toute demande de licence pro / partenariat constructeur : Discord **nayrolf_rdgs** ou via GitHub [@NayrolfRdgs](https://github.com/NayrolfRdgs).
 
-Créé avec passion par **Flow (Florian) — [FlowCreativeStudio](https://github.com/NayrolfRdgs)** & la communauté KaïroOS.
+---
+
+<div align="center">
+
+**FlowCreativeStudio** · Florian ([@NayrolfRdgs](https://github.com/NayrolfRdgs)) · Discord: `nayrolf_rdgs`
+
+</div>
+

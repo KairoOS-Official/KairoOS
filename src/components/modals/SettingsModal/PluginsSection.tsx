@@ -23,6 +23,7 @@ import {
   Sparkles,
   Star,
   Search,
+  Lock,
 } from 'lucide-react';
 import { PluginInfo, PluginDetail, PluginManifest } from '../../../types';
 import {
@@ -712,21 +713,31 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                             </span>
                           </div>
 
-                          <button
-                            onClick={() => handleTogglePlugin(p)}
-                            disabled={actionLoadingId === p.id}
-                            style={{
-                              backgroundColor: p.enabled ? 'var(--accent-primary)' : 'var(--bg-secondary)',
-                            }}
-                            className="w-11 h-6 rounded-full p-1 transition-colors relative cursor-pointer"
-                            title={p.enabled ? 'Désactiver le plugin' : 'Activer le plugin'}
-                          >
+                          {p.required ? (
                             <div
-                              className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                                p.enabled ? 'translate-x-5' : 'translate-x-0'
-                              }`}
-                            />
-                          </button>
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30 cursor-not-allowed select-none"
+                              title="Service obligatoire requis pour le bon fonctionnement de KaïroOS (non désactivable)"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              <span className="text-[10px] font-black uppercase tracking-wider">Requis</span>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleTogglePlugin(p)}
+                              disabled={actionLoadingId === p.id}
+                              style={{
+                                backgroundColor: p.enabled ? 'var(--accent-primary)' : 'var(--bg-secondary)',
+                              }}
+                              className="w-11 h-6 rounded-full p-1 transition-colors relative cursor-pointer"
+                              title={p.enabled ? 'Désactiver le plugin' : 'Activer le plugin'}
+                            >
+                              <div
+                                className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                                  p.enabled ? 'translate-x-5' : 'translate-x-0'
+                                }`}
+                              />
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -806,7 +817,7 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                       </div>
 
                       <div>
-                        {!isBuiltin ? (
+                        {!isBuiltin && !p.required ? (
                           <button
                             onClick={() => handleUninstall(p)}
                             className="p-1.5 rounded-xl text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
@@ -818,9 +829,9 @@ export const PluginsSection: React.FC<PluginsSectionProps> = ({ onNotification, 
                           <span
                             style={{ color: 'var(--text-muted)' }}
                             className="text-[10px] italic font-bold"
-                            title="Les plugins système sont protégés"
+                            title="Les plugins système et requis sont protégés"
                           >
-                            Protégé
+                            {p.required ? 'Requis (Protégé)' : 'Protégé'}
                           </span>
                         )}
                       </div>

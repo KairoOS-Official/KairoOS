@@ -90,8 +90,6 @@ impl Launcher {
         }
 
         let emu_base = AppPaths::get_emulators_dir();
-        let appdata_dir = AppPaths::get_appdata_dir();
-        let appdata_emu = appdata_dir.join("emulators");
 
         // 2. Détection automatique selon le nom de l'émulateur
         let candidates: Vec<PathBuf> = match emulator_id {
@@ -101,7 +99,6 @@ impl Launcher {
                     emu_base.join("retroarch/retroarch.exe"),
                     exe_dir.join("emulators/RetroArch/retroarch.exe"),
                     exe_dir.join("emulators/retroarch/retroarch.exe"),
-                    appdata_emu.join("RetroArch/retroarch.exe"),
                     current_dir.join("emulators/RetroArch/retroarch.exe"),
                     PathBuf::from("C:\\Emulators\\RetroArch\\retroarch.exe"),
                 ]
@@ -112,7 +109,6 @@ impl Launcher {
                     emu_base.join("PCSX2/pcsx2.exe"),
                     exe_dir.join("emulators/PCSX2/pcsx2-qt.exe"),
                     exe_dir.join("emulators/PCSX2/pcsx2.exe"),
-                    appdata_emu.join("PCSX2/pcsx2-qt.exe"),
                     current_dir.join("emulators/PCSX2/pcsx2-qt.exe"),
                     PathBuf::from("C:\\Emulators\\PCSX2\\pcsx2-qt.exe"),
                 ]
@@ -121,7 +117,6 @@ impl Launcher {
                 vec![
                     emu_base.join("Dolphin/Dolphin.exe"),
                     exe_dir.join("emulators/Dolphin/Dolphin.exe"),
-                    appdata_emu.join("Dolphin/Dolphin.exe"),
                     current_dir.join("emulators/Dolphin/Dolphin.exe"),
                     PathBuf::from("C:\\Emulators\\Dolphin\\Dolphin.exe"),
                 ]
@@ -132,7 +127,6 @@ impl Launcher {
                     emu_base.join("Ryujinx/Ryubing.exe"),
                     exe_dir.join("emulators/Ryujinx/Ryujinx.exe"),
                     exe_dir.join("emulators/Ryujinx/Ryubing.exe"),
-                    appdata_emu.join("Ryujinx/Ryujinx.exe"),
                     current_dir.join("emulators/Ryujinx/Ryujinx.exe"),
                     PathBuf::from("C:\\Emulators\\Ryujinx\\Ryujinx.exe"),
                 ]
@@ -141,7 +135,6 @@ impl Launcher {
                 vec![
                     emu_base.join("RPCS3/rpcs3.exe"),
                     exe_dir.join("emulators/RPCS3/rpcs3.exe"),
-                    appdata_emu.join("RPCS3/rpcs3.exe"),
                     current_dir.join("emulators/RPCS3/rpcs3.exe"),
                     PathBuf::from("C:\\Emulators\\RPCS3\\rpcs3.exe"),
                 ]
@@ -168,7 +161,7 @@ impl Launcher {
         emulator: &Emulator,
         config: Option<&GameConfig>,
     ) -> Result<Command, LauncherError> {
-        // Résoudre le chemin de la ROM : absolu, ou relatif à exe_dir / appdata / current_dir
+        // Résoudre le chemin de la ROM : absolu, ou relatif à exe_dir / data_dir / current_dir
         let rom_path_raw = Path::new(&game.file_path);
         let rom_path: std::borrow::Cow<Path> = if rom_path_raw.is_absolute() {
             std::borrow::Cow::Borrowed(rom_path_raw)
@@ -178,9 +171,9 @@ impl Launcher {
             if candidate_exe.exists() {
                 std::borrow::Cow::Owned(candidate_exe)
             } else {
-                let candidate_appdata = AppPaths::get_appdata_dir().join(rom_path_raw);
-                if candidate_appdata.exists() {
-                    std::borrow::Cow::Owned(candidate_appdata)
+                let candidate_data = AppPaths::get_data_dir().join(rom_path_raw);
+                if candidate_data.exists() {
+                    std::borrow::Cow::Owned(candidate_data)
                 } else {
                     let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
                     let candidate_cwd = current_dir.join(rom_path_raw);

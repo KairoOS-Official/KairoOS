@@ -71,20 +71,22 @@ if (existsSync('emulators')) {
 }
 
 // 5. Synchronisation automatique de tous les thèmes
-if (existsSync('themes')) {
-  console.log('🎨 Synchronisation des thèmes dans builds/portable/themes/ ...');
+const themesSource = existsSync('../kairos-themes/official') ? '../kairos-themes/official' : 'themes';
+if (existsSync(themesSource)) {
+  console.log(`🎨 Synchronisation des thèmes (${themesSource}) dans builds/portable/themes/ ...`);
   try {
-    execSync('powershell -Command "Copy-Item -Path \'themes/*\' -Destination \'builds/portable/themes\' -Recurse -Force -ErrorAction SilentlyContinue"', { stdio: 'ignore' });
+    execSync(`powershell -Command "Copy-Item -Path '${themesSource}/*' -Destination 'builds/portable/themes' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
   } catch (_) {}
 }
 
 // 5bis. Synchronisation automatique des plugins
-if (existsSync('plugins')) {
-  console.log('🔌 Synchronisation des plugins dans builds/portable/plugins/ ...');
+const pluginsSource = existsSync('../kairos-plugins/official') ? '../kairos-plugins/official' : 'plugins';
+if (existsSync(pluginsSource)) {
+  console.log(`🔌 Synchronisation des plugins (${pluginsSource}) dans builds/portable/plugins/ ...`);
   try {
     const pluginsTarget = path.join(portableDir, 'plugins');
     if (!existsSync(pluginsTarget)) mkdirSync(pluginsTarget, { recursive: true });
-    execSync('powershell -Command "Copy-Item -Path \'plugins/*\' -Destination \'builds/portable/plugins\' -Recurse -Force -ErrorAction SilentlyContinue"', { stdio: 'ignore' });
+    execSync(`powershell -Command "Copy-Item -Path '${pluginsSource}/*' -Destination 'builds/portable/plugins' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
   } catch (_) {}
 }
 

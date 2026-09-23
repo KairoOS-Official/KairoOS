@@ -126,5 +126,7 @@ Vous êtes :
 - Un investisseur ou sponsor souhaitant soutenir le développement :
 
 📩 **Contact Officiel Partenariats & Licences Pro** :
-- **Email** : \contact@kairoos.org\ ou \pro@kairoos.org- **GitHub Discussions / Sponsors** : [https://github.com/KairoOS-Official/KairoOS](https://github.com/KairoOS-Official/KairoOS)
-- **Fondateur** : Florian — FlowCreativeStudio ([@NayrolfRdgs](https://github.com/NayrolfRdgs))
+- **Discord** : `nayrolf_rdgs`
+- **GitHub Discussions / Issues** : [https://github.com/NayrolfRdgs](https://github.com/NayrolfRdgs) ou [https://github.com/KairoOS-Official/KairoOS](https://github.com/KairoOS-Official/KairoOS)
+- **Créateur & Studio** : Flow (Florian) — **FlowCreativeStudio**
+
