@@ -126,6 +126,8 @@ Vous êtes :
 - Un investisseur ou sponsor souhaitant soutenir le développement :
 
 📩 **Contact Officiel Partenariats & Licences Pro** :
+- **Email de contact** : [contact@flowcrea.fr](mailto:contact@flowcrea.fr)
+- **Site officiel** : [https://kairo.flowcrea.fr/pro/](https://kairo.flowcrea.fr/pro/)
 - **Discord** : `nayrolf_rdgs`
 - **GitHub Discussions / Issues** : [https://github.com/NayrolfRdgs](https://github.com/NayrolfRdgs) ou [https://github.com/KairoOS-Official/KairoOS](https://github.com/KairoOS-Official/KairoOS)
 - **Créateur & Studio** : Flow (Florian) — **FlowCreativeStudio**

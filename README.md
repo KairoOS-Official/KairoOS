@@ -7,15 +7,15 @@
 **Frontend d'arcade custom complet sous Windows, gratuit pour usage personnel.**  
 *Conçu pour bornes d'arcade physiques — Navigable à 100% au Joystick/Gamepad — Zéro souris, zéro clavier visible.*
 
-[![Website](https://img.shields.io/badge/Website-kairo--arcade.onrender.com-6366F1?style=flat-square&logo=googlechrome&logoColor=white)](https://kairo-arcade.onrender.com/)
-[![Démo Interactive](https://img.shields.io/badge/Démo_Interactive-Tester_en_Ligne-00DC82?style=flat-square&logo=render&logoColor=white)](https://kairo-arcade.onrender.com/)
+[![Website](https://img.shields.io/badge/Website-kairo.flowcrea.fr-6366F1?style=flat-square&logo=googlechrome&logoColor=white)](https://kairo.flowcrea.fr/)
+[![Démo Interactive](https://img.shields.io/badge/Démo_Interactive-Tester_en_Ligne-00DC82?style=flat-square&logo=render&logoColor=white)](https://kairo.flowcrea.fr/)
 [![Rust](https://img.shields.io/badge/Rust-1.96+-orange.svg?style=flat-square&logo=rust)](https://www.rust-lang.org/)
 [![Tauri 2](https://img.shields.io/badge/Tauri-v2-blue.svg?style=flat-square&logo=tauri)](https://v2.tauri.app/)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg?style=flat-square&logo=react)](https://react.dev/)
 [![License: Noncommercial](https://img.shields.io/badge/License-Noncommercial-blue.svg?style=flat-square)](LICENSE)
 [![Pro License](https://img.shields.io/badge/Commercial-KaïroOS_Pro-gold.svg?style=flat-square)](docs/COMMERCIAL_AND_LICENSING.md)
 
-> ### 🕹️ [👉 Découvrir la Vitrine Officielle & Démo Interactive : kairo-arcade.onrender.com 👈](https://kairo-arcade.onrender.com/)
+> ### 🕹️ [👉 Découvrir la Vitrine Officielle & Démo Interactive : kairo.flowcrea.fr 👈](https://kairo.flowcrea.fr/)
 > Testez l'interface arcade sans installation, explorez les thèmes avec le simulateur CRT et votez sur la feuille de route communautaire !
 
 ---
@@ -159,13 +159,13 @@ kairo-cli settings          # Gérer les paramètres
 Pour les détails complets, consultez :
 - Le fichier [LICENSE](LICENSE) (KaïroOS Community & Noncommercial License 1.0).
 - Le guide détaillé [Licence, Exploitation Commerciale & Modèle Opérateur](docs/COMMERCIAL_AND_LICENSING.md).
-- Pour toute demande de licence pro / partenariat constructeur : Discord **nayrolf_rdgs** ou via GitHub [@NayrolfRdgs](https://github.com/NayrolfRdgs).
+- Pour toute demande de licence pro / partenariat constructeur : email [contact@flowcrea.fr](mailto:contact@flowcrea.fr), Discord **nayrolf_rdgs** ou via GitHub [@NayrolfRdgs](https://github.com/NayrolfRdgs).
 
 ---
 
 <div align="center">
 
-**FlowCreativeStudio** · Florian ([@NayrolfRdgs](https://github.com/NayrolfRdgs)) · Discord: `nayrolf_rdgs`
+**FlowCreativeStudio** · Florian ([@NayrolfRdgs](https://github.com/NayrolfRdgs)) · Email: [contact@flowcrea.fr](mailto:contact@flowcrea.fr) · Discord: `nayrolf_rdgs` · Site: [kairo.flowcrea.fr](https://kairo.flowcrea.fr/)
 
 </div>
 
