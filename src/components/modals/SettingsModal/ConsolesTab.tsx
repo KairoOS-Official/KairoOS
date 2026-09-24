@@ -50,49 +50,60 @@ export const ConsolesTab: React.FC<ConsolesTabProps> = ({
   systems,
   enabledSystems,
   setEnabledSystems,
-  enabledModes = ['2-players', 'genre:fight', 'genre:platform'],
+  enabledModes,
   setEnabledModes,
-  enabledFranchises = ['mario', 'zelda', 'pokemon', 'sonic', 'versus', 'rpg'],
+  enabledFranchises,
   setEnabledFranchises,
 }) => {
+  const safeEnabledSystems = Array.isArray(enabledSystems)
+    ? enabledSystems
+    : (systems ? systems.map((s) => s.id) : []);
+  const safeEnabledModes = Array.isArray(enabledModes)
+    ? enabledModes
+    : ['2-players', 'genre:fight', 'genre:platform'];
+  const safeEnabledFranchises = Array.isArray(enabledFranchises)
+    ? enabledFranchises
+    : ['mario', 'zelda', 'pokemon', 'sonic', 'versus', 'rpg'];
+
   // 1. Gestion des Modes & Genres
   const isModeEnabled = (modeId: string) => {
-    return enabledModes.includes(modeId);
+    return safeEnabledModes.includes(modeId);
   };
 
   const toggleMode = (modeId: string) => {
     if (!setEnabledModes) return;
-    if (enabledModes.includes(modeId)) {
-      setEnabledModes(enabledModes.filter((id) => id !== modeId));
+    if (safeEnabledModes.includes(modeId)) {
+      setEnabledModes(safeEnabledModes.filter((id) => id !== modeId));
     } else {
-      setEnabledModes([...enabledModes, modeId]);
+      setEnabledModes([...safeEnabledModes, modeId]);
     }
   };
 
   // 2. Gestion des Consoles
   const isSystemEnabled = (sysId: string) => {
-    return enabledSystems.includes(sysId);
+    return safeEnabledSystems.includes(sysId);
   };
 
   const toggleSystem = (sysId: string) => {
-    if (enabledSystems.includes(sysId)) {
-      setEnabledSystems(enabledSystems.filter((id) => id !== sysId));
+    if (!setEnabledSystems) return;
+    if (safeEnabledSystems.includes(sysId)) {
+      setEnabledSystems(safeEnabledSystems.filter((id) => id !== sysId));
     } else {
-      setEnabledSystems([...enabledSystems, sysId]);
+      setEnabledSystems([...safeEnabledSystems, sysId]);
     }
   };
 
   // 3. Gestion des Franchises
   const isFranchiseEnabled = (fId: string) => {
-    return enabledFranchises.includes(fId);
+    return safeEnabledFranchises.includes(fId);
   };
 
   const toggleFranchise = (fId: string) => {
     if (!setEnabledFranchises) return;
-    if (enabledFranchises.includes(fId)) {
-      setEnabledFranchises(enabledFranchises.filter((id) => id !== fId));
+    if (safeEnabledFranchises.includes(fId)) {
+      setEnabledFranchises(safeEnabledFranchises.filter((id) => id !== fId));
     } else {
-      setEnabledFranchises([...enabledFranchises, fId]);
+      setEnabledFranchises([...safeEnabledFranchises, fId]);
     }
   };
 
@@ -123,7 +134,7 @@ export const ConsolesTab: React.FC<ConsolesTabProps> = ({
               Tout Masquer
             </button>
             <span className="text-[11px] text-slate-400 font-mono ml-1">
-              {enabledModes.length}/{AVAILABLE_MODES.length} ACTIVÉS
+              {safeEnabledModes.length}/{AVAILABLE_MODES.length} ACTIVÉS
             </span>
           </div>
         </div>

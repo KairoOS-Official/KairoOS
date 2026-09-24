@@ -20,9 +20,10 @@ export const FranchisesTab: React.FC<FranchisesTabProps> = ({
   const [newFranchiseKeywords, setNewFranchiseKeywords] = useState('');
 
   const toggleFranchise = (id: string) => {
-    setEnabledFranchises((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+    setEnabledFranchises((prev) => {
+      const list = Array.isArray(prev) ? prev : [];
+      return list.includes(id) ? list.filter((item) => item !== id) : [...list, id];
+    });
   };
 
   const handleAddCustomFranchise = () => {
@@ -64,7 +65,7 @@ export const FranchisesTab: React.FC<FranchisesTabProps> = ({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {POPULAR_FRANCHISES.map((franchise) => {
-            const isChecked = enabledFranchises.includes(franchise.id);
+            const isChecked = Array.isArray(enabledFranchises) && enabledFranchises.includes(franchise.id);
             return (
               <label
                 key={franchise.id}
@@ -88,7 +89,7 @@ export const FranchisesTab: React.FC<FranchisesTabProps> = ({
           })}
 
           {customFranchises.map((custom) => {
-            const isChecked = enabledFranchises.includes(custom.id);
+            const isChecked = Array.isArray(enabledFranchises) && enabledFranchises.includes(custom.id);
             return (
               <div
                 key={custom.id}

@@ -525,7 +525,7 @@ export const App: React.FC = () => {
     allGames,
     filteredAndSortedGames,
     allFranchises,
-    customFranchises: settings.custom_franchises,
+    customFranchises: Array.isArray(settings.custom_franchises) ? settings.custom_franchises : [],
     selectedCategory,
     onSelectCategory: (cat) => {
       setSelectedCategory(cat);
@@ -533,9 +533,9 @@ export const App: React.FC = () => {
     },
     categoryTitle: currentCategoryTitle,
     categoryList,
-    enabledSystems: settings.enabled_systems,
-    enabledModes: settings.enabled_modes,
-    enabledFranchises: settings.enabled_franchises,
+    enabledSystems: Array.isArray(settings.enabled_systems) ? settings.enabled_systems : undefined,
+    enabledModes: Array.isArray(settings.enabled_modes) ? settings.enabled_modes : undefined,
+    enabledFranchises: Array.isArray(settings.enabled_franchises) ? settings.enabled_franchises : ['mario', 'zelda', 'pokemon', 'sonic', 'versus', 'rpg'],
     favoriteGames,
     twoPlayerGames,
     recentGames,
