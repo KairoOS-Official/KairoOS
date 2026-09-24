@@ -8,13 +8,11 @@ Cargo.lock
 node_modules/
 dist/
 dist-ssr/
-dist-portable/
 builds/
 *.local
 
 # Tauri
 src-tauri/target/
-src-tauri/themes/
 
 # SQLite & Data
 *.db
@@ -55,18 +53,18 @@ npm-debug.log*
 pnpm-debug.log*
 yarn-debug.log*
 
-# Emulator runtime configs & histories
-emulators/RetroArch/content_history.lpl
-emulators/RetroArch/kairo_gamepads.cfg
-emulators/RetroArch/retroarch.cfg
+# Emulator binaries (kept clean in repo, downloaded at runtime or in .live/)
+emulators/*/**
+!emulators/**/.gitkeep
+!emulators/**/LISEZ-MOI.txt
 crates/**/emulators/
 
 # AI Agent Instructions & Private Documentation (Non public)
 AGENTS.md
+.claude/
 docs/AGENT_PHILOSOPHY.md
 docs/*AGENT*.md
 docs/*PHILOSOPHY*.md
-docs/PROMPTS.md
 
 # Plugins & Thèmes externalisés (lus depuis .live/ et kairos-plugins/kairos-themes)
 plugins/
@@ -75,3 +73,6 @@ themes/
 # Dev local hermétique & bac live
 .live/
 .kairo-dev/
+dist-portable/
+crates/**/dist-portable/
+

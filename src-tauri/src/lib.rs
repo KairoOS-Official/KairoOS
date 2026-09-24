@@ -195,6 +195,10 @@ pub fn run() {
             commands::run_plugin_command,
             commands::open_plugins_folder,
             commands::get_plugin_contributions,
+            commands::get_emulator_catalog,
+            commands::download_emulator,
+            commands::scan_and_auto_detect_emulators,
+            commands::open_emulators_folder,
         ])
         .run(tauri::generate_context!())
 

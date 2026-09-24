@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tokio::sync::oneshot;
 use axum::{
     extract::{Path as AxumPath, Query, State},
@@ -60,25 +60,10 @@ impl Default for RemoteConfig {
 
 impl RemoteConfig {
     pub fn load() -> Self {
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let base_dir = if current_dir.ends_with("src-tauri") {
-            current_dir.parent().unwrap_or(&current_dir).to_path_buf()
-        } else {
-            current_dir
-        };
-
-        for path in &[
-            base_dir.join("config/remote.json"),
-            PathBuf::from("config/remote.json"),
-            PathBuf::from("../config/remote.json"),
-            PathBuf::from("dist-portable/config/remote.json"),
-        ] {
-            if path.exists() {
-                if let Ok(content) = std::fs::read_to_string(path) {
-                    if let Ok(cfg) = serde_json::from_str::<RemoteConfig>(&content) {
-                        return cfg;
-                    }
-                }
+        let path = crate::paths::AppPaths::get_config_dir().join("remote.json");
+        if let Ok(content) = std::fs::read_to_string(path) {
+            if let Ok(cfg) = serde_json::from_str::<RemoteConfig>(&content) {
+                return cfg;
             }
         }
         let default_cfg = Self::default();
@@ -87,24 +72,9 @@ impl RemoteConfig {
     }
 
     pub fn save(cfg: &RemoteConfig) -> std::io::Result<()> {
-        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let base_dir = if current_dir.ends_with("src-tauri") {
-            current_dir.parent().unwrap_or(&current_dir).to_path_buf()
-        } else {
-            current_dir
-        };
-
-        let dir = base_dir.join("config");
-        if !dir.exists() {
-            let _ = std::fs::create_dir_all(&dir);
-        }
+        let dir = crate::paths::AppPaths::get_config_dir();
         let json = serde_json::to_string_pretty(cfg)?;
         std::fs::write(dir.join("remote.json"), &json)?;
-
-        let portable_dir = base_dir.join("dist-portable/config");
-        if portable_dir.exists() {
-            let _ = std::fs::write(portable_dir.join("remote.json"), &json);
-        }
         Ok(())
     }
 }
@@ -604,7 +574,7 @@ async fn get_status(State(state): State<RemoteServerState>) -> impl IntoResponse
         kiosk_mode: settings.kiosk_mode,
         port: config.port,
         local_ip,
-        version: "0.1.0",
+        version: "26.1.0",
     })
 }
 
@@ -620,7 +590,7 @@ async fn get_system_info(State(state): State<RemoteServerState>) -> impl IntoRes
     Json(SystemInfoResponse {
         local_ip,
         port: config.port,
-        version: "0.1.0",
+        version: "26.1.0",
         install_dir,
         kiosk_mode: settings.kiosk_mode,
         total_games,
@@ -859,14 +829,10 @@ async fn save_emulators(
         }
     }
 
-    // Écrire également config/emulators.json
-    let config_dir = Path::new("config");
+    // Ecrire la configuration dans le dossier actif de l'application.
+    let config_dir = crate::paths::AppPaths::get_config_dir();
     if let Ok(pretty) = serde_json::to_string_pretty(&emulators) {
         let _ = std::fs::write(config_dir.join("emulators.json"), &pretty);
-        let portable_dir = Path::new("dist-portable/config");
-        if portable_dir.exists() {
-            let _ = std::fs::write(portable_dir.join("emulators.json"), &pretty);
-        }
     }
 
     state.notify(RemoteEvent::EmulatorsUpdated(emulators.clone()));

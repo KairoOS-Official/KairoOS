@@ -16,6 +16,7 @@ import {
   ChevronLeft,
 } from 'lucide-react';
 import { ThemeUIProps } from '../types';
+import logoUrl from '../../assets/logo.png';
 import { GameCard } from '../../components/games/GameCard';
 import { ConsoleLogo } from '../../components/common/ConsoleLogo';
 import { GamepadFooterBar } from '../../components/layout/GamepadFooterBar';
@@ -422,7 +423,7 @@ export const HubShelfTheme: React.FC<ThemeUIProps> = ({
             style={{ backgroundColor: 'var(--accent-primary)' }}
             className="w-10 h-10 rounded-2xl flex items-center justify-center p-1.5 text-white shadow-md shadow-black/10 shrink-0"
           >
-            <img src="/logo.png" alt="KaïroOS" className="w-full h-full object-contain" />
+            <img src={logoUrl} alt="KaïroOS" className="w-full h-full object-contain" />
           </div>
           <div>
             <div className="flex items-center gap-2">
