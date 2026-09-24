@@ -497,11 +497,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {activeSection === 'consoles' && (
               <ConsolesTab
                 systems={systems}
-                enabledSystems={localSettings.enabled_systems !== undefined ? localSettings.enabled_systems : systems.map((s) => s.id)}
+                enabledSystems={Array.isArray(localSettings.enabled_systems) ? localSettings.enabled_systems : systems.map((s) => s.id)}
                 setEnabledSystems={(systemsList) => updateSetting('enabled_systems', systemsList)}
-                enabledModes={localSettings.enabled_modes !== undefined ? localSettings.enabled_modes : ['2-players', 'genre:fight', 'genre:platform']}
+                enabledModes={Array.isArray(localSettings.enabled_modes) ? localSettings.enabled_modes : ['2-players', 'genre:fight', 'genre:platform']}
                 setEnabledModes={(modesList) => updateSetting('enabled_modes', modesList)}
-                enabledFranchises={localSettings.enabled_franchises !== undefined ? localSettings.enabled_franchises : ['mario', 'zelda', 'pokemon', 'sonic', 'versus', 'rpg']}
+                enabledFranchises={Array.isArray(localSettings.enabled_franchises) ? localSettings.enabled_franchises : ['mario', 'zelda', 'pokemon', 'sonic', 'versus', 'rpg']}
                 setEnabledFranchises={(frList) => updateSetting('enabled_franchises', frList)}
               />
             )}

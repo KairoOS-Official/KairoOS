@@ -85,6 +85,11 @@ if (existsSync(themesSource)) {
   console.log(`🎨 Synchronisation des thèmes (${themesSource}) dans builds/portable/themes/ ...`);
   try {
     execSync(`powershell -Command "Copy-Item -Path '${themesSource}/*' -Destination '${path.join(portableDir, 'themes')}' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
+    // Supprimer les fichiers résiduels à la racine de themes/ si présents
+    const looseThemeJson = path.join(portableDir, 'themes', 'theme.json');
+    if (existsSync(looseThemeJson)) unlinkSync(looseThemeJson);
+    const loosePreviewSvg = path.join(portableDir, 'themes', 'preview.svg');
+    if (existsSync(loosePreviewSvg)) unlinkSync(loosePreviewSvg);
   } catch (_) {}
 }
 
@@ -120,6 +125,11 @@ const defaultSettings = {
     "sonic",
     "versus",
     "rpg"
+  ],
+  enabled_modes: [
+    "2-players",
+    "genre:fight",
+    "genre:platform"
   ],
   custom_franchises: []
 };

@@ -44,7 +44,7 @@ export const ConsoleLauncherTheme: React.FC<ThemeUIProps> = ({
   // 1. Liste des systèmes disponibles (selon filtres borne)
   const availableSystems = useMemo(() => {
     const list = systems.filter((s) => {
-      if (enabledSystems === undefined || enabledSystems.length === 0) return true;
+      if (!enabledSystems || !Array.isArray(enabledSystems) || enabledSystems.length === 0) return true;
       return enabledSystems.includes(s.id);
     });
     return list;

@@ -20,6 +20,18 @@ const DEFAULT_REMOTE_CONFIG: RemoteConfig = {
   allowed_origins: ['*'],
 };
 
+const normalizeAppSettings = (raw: Partial<AppSettings> | null | undefined): AppSettings => {
+  if (!raw) return DEFAULT_APP_SETTINGS;
+  return {
+    ...DEFAULT_APP_SETTINGS,
+    ...raw,
+    enabled_systems: Array.isArray(raw.enabled_systems) ? raw.enabled_systems : undefined,
+    enabled_modes: Array.isArray(raw.enabled_modes) ? raw.enabled_modes : undefined,
+    enabled_franchises: Array.isArray(raw.enabled_franchises) ? raw.enabled_franchises : DEFAULT_APP_SETTINGS.enabled_franchises,
+    custom_franchises: Array.isArray(raw.custom_franchises) ? raw.custom_franchises : [],
+  };
+};
+
 export function useAppSettings() {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [gamepadMappings, setGamepadMappings] = useState<GamepadMapping[]>([]);
@@ -35,7 +47,7 @@ export function useAppSettings() {
         apiGetAppMode().catch(() => 'admin' as AppMode),
         apiGetRemoteConfig().catch(() => DEFAULT_REMOTE_CONFIG),
       ]);
-      setSettings(fetchedSettings);
+      setSettings(normalizeAppSettings(fetchedSettings));
       setGamepadMappings(fetchedMappings);
       setAppMode(fetchedMode);
       setRemoteConfig(fetchedRemote);
@@ -55,7 +67,7 @@ export function useAppSettings() {
       import('@tauri-apps/api/event').then(({ listen }) => {
         listen<AppSettings>('kairo://settings-updated', (event) => {
           console.log('[useAppSettings] Synchronisation paramètres reçue en temps réel:', event.payload);
-          setSettings((prev) => ({ ...prev, ...event.payload }));
+          setSettings((prev) => normalizeAppSettings({ ...prev, ...event.payload }));
           if (event.payload.kiosk_mode !== undefined) {
             setAppMode(event.payload.kiosk_mode ? 'kiosk' : 'admin');
           }
@@ -94,7 +106,7 @@ export function useAppSettings() {
     } catch (err) {
       console.warn('[useAppSettings] Save fallback:', err);
     }
-    setSettings(newSettings);
+    setSettings(normalizeAppSettings(newSettings));
   }, []);
 
   const toggleFullscreen = useCallback(async () => {

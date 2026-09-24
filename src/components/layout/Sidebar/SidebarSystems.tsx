@@ -18,7 +18,7 @@ export const SidebarSystems: React.FC<SidebarSystemsProps> = ({
   enabledSystems,
 }) => {
   const visibleSystems = systems.filter((s) => {
-    if (enabledSystems === undefined) return true;
+    if (!enabledSystems || !Array.isArray(enabledSystems) || enabledSystems.length === 0) return true;
     return enabledSystems.includes(s.id);
   });
 
