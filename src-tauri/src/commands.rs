@@ -1197,3 +1197,371 @@ pub fn get_plugin_contributions(
     Ok(state.plugin_manager.get_contributions_for_host(&host_id))
 }
 
+// =========================================================================
+// GESTIONNAIRE D'ÉMULATEURS : CATALOGUE, TÉLÉCHARGEMENT & AUTO-DÉTECTION
+// =========================================================================
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EmulatorCatalogItem {
+    pub id: String,
+    pub name: String,
+    pub systems: Vec<String>,
+    pub description: String,
+    pub default_exe: String,
+    pub default_args: String,
+    pub download_url: Option<String>,
+    pub is_installed: bool,
+    pub installed_path: Option<String>,
+    pub website_url: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EmulatorDownloadProgress {
+    pub id: String,
+    pub percent: u32,
+    pub status: String,
+    pub error: Option<String>,
+}
+
+pub fn detect_installed_emulator(emu_id: &str) -> Option<PathBuf> {
+    let emu_dirs = kairo_core::AppPaths::get_emulator_search_dirs();
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    for dir in &emu_dirs {
+        match emu_id {
+            "retroarch" => {
+                candidates.push(dir.join("RetroArch").join("retroarch.exe"));
+                candidates.push(dir.join("retroarch").join("retroarch.exe"));
+                candidates.push(dir.join("retroarch.exe"));
+            }
+            "pcsx2" => {
+                candidates.push(dir.join("PCSX2").join("pcsx2-qt.exe"));
+                candidates.push(dir.join("PCSX2").join("pcsx2.exe"));
+                candidates.push(dir.join("pcsx2-qt.exe"));
+                candidates.push(dir.join("pcsx2.exe"));
+            }
+            "dolphin" => {
+                candidates.push(dir.join("Dolphin").join("Dolphin.exe"));
+                candidates.push(dir.join("dolphin").join("Dolphin.exe"));
+                candidates.push(dir.join("Dolphin.exe"));
+            }
+            "ryujinx" => {
+                candidates.push(dir.join("Ryujinx").join("Ryujinx.exe"));
+                candidates.push(dir.join("Ryujinx").join("Ryubing.exe"));
+                candidates.push(dir.join("Ryujinx.exe"));
+            }
+            "rpcs3" => {
+                candidates.push(dir.join("RPCS3").join("rpcs3.exe"));
+                candidates.push(dir.join("rpcs3.exe"));
+            }
+            _ => {
+                candidates.push(dir.join(emu_id).join(format!("{}.exe", emu_id)));
+                candidates.push(dir.join(format!("{}.exe", emu_id)));
+            }
+        }
+    }
+    candidates.into_iter().find(|p| p.exists())
+}
+
+#[tauri::command]
+pub fn get_emulator_catalog(state: State<'_, AppState>) -> Result<Vec<EmulatorCatalogItem>, String> {
+    let db_emus = state.db.get_emulators().unwrap_or_default();
+    let get_db_path = |id: &str| -> Option<String> {
+        db_emus.iter().find(|e| e.id == id).and_then(|e| e.exe_path.clone())
+    };
+
+    let items = vec![
+        EmulatorCatalogItem {
+            id: "retroarch".into(),
+            name: "RetroArch (Arcade, NES, SNES, GBA, PS1, N64)".into(),
+            systems: vec!["nes".into(), "snes".into(), "gba".into(), "n64".into(), "ps1".into(), "megadrive".into(), "arcade".into()],
+            description: "Moteur d'émulation universel haute performance avec cœurs Libretro optimisés.".into(),
+            default_exe: "emulators/RetroArch/retroarch.exe".into(),
+            default_args: "-L \"{core_path}\" \"{rom_path}\"".into(),
+            download_url: Some("https://buildbot.libretro.com/stable/1.19.1/windows/x86_64/RetroArch.7z".into()),
+            is_installed: false,
+            installed_path: None,
+            website_url: "https://www.retroarch.com/".into(),
+            notes: Some("Installation 1-clic : moteur officiel + cœurs essentiels (SNES, GBA, Megadrive, PS1, N64, FBNeo).".into()),
+        },
+        EmulatorCatalogItem {
+            id: "dolphin".into(),
+            name: "Dolphin (GameCube & Wii)".into(),
+            systems: vec!["gamecube".into(), "wii".into()],
+            description: "Émulateur référence GameCube et Wii avec rendu 4K et gestion des manettes.".into(),
+            default_exe: "emulators/Dolphin/Dolphin.exe".into(),
+            default_args: "-b -e \"{rom_path}\"".into(),
+            download_url: Some("https://dl.dolphin-emu.org/releases/2409/dolphin-2409-x64.7z".into()),
+            is_installed: false,
+            installed_path: None,
+            website_url: "https://dolphin-emu.org/".into(),
+            notes: Some("Installation 1-clic : version x64 stable configurée en mode portable.".into()),
+        },
+        EmulatorCatalogItem {
+            id: "pcsx2".into(),
+            name: "PCSX2 (PlayStation 2)".into(),
+            systems: vec!["ps2".into()],
+            description: "Émulateur PlayStation 2 pour PC, compatible avec plus de 99% du catalogue PS2.".into(),
+            default_exe: "emulators/PCSX2/pcsx2-qt.exe".into(),
+            default_args: "--nogui -batch \"{rom_path}\"".into(),
+            download_url: Some("https://github.com/PCSX2/pcsx2/releases/download/v2.2.0/pcsx2-v2.2.0-windows-x64-Qt.7z".into()),
+            is_installed: false,
+            installed_path: None,
+            website_url: "https://pcsx2.net/".into(),
+            notes: Some("Installation 1-clic : version Qt 64-bit portable officielle.".into()),
+        },
+        EmulatorCatalogItem {
+            id: "ryujinx".into(),
+            name: "Ryujinx (Nintendo Switch)".into(),
+            systems: vec!["switch".into()],
+            description: "Émulateur Switch sous Windows avec compatibilité manette.".into(),
+            default_exe: "emulators/Ryujinx/Ryujinx.exe".into(),
+            default_args: "-f -g \"{rom_path}\"".into(),
+            download_url: None,
+            is_installed: false,
+            installed_path: None,
+            website_url: "https://ryujinx.app/".into(),
+            notes: Some("Projet archivé par Nintendo. Déposez votre Ryujinx.exe dans le dossier emulators/Ryujinx/ pour détection automatique.".into()),
+        },
+        EmulatorCatalogItem {
+            id: "rpcs3".into(),
+            name: "RPCS3 (PlayStation 3)".into(),
+            systems: vec!["ps3".into()],
+            description: "Émulateur PlayStation 3 pour PC.".into(),
+            default_exe: "emulators/RPCS3/rpcs3.exe".into(),
+            default_args: "--no-gui \"{rom_path}\"".into(),
+            download_url: None,
+            is_installed: false,
+            installed_path: None,
+            website_url: "https://rpcs3.net/".into(),
+            notes: Some("Installation manuelle dans emulators/RPCS3/.".into()),
+        },
+    ];
+
+    let mut result = Vec::new();
+    for mut item in items {
+        // 1. Vérifier si un chemin explicite dans la DB existe
+        if let Some(db_path) = get_db_path(&item.id) {
+            let p = PathBuf::from(&db_path);
+            if p.exists() {
+                item.is_installed = true;
+                item.installed_path = Some(db_path);
+                result.push(item);
+                continue;
+            }
+        }
+
+        // 2. Détection automatique dans les dossiers
+        if let Some(detected) = detect_installed_emulator(&item.id) {
+            item.is_installed = true;
+            item.installed_path = Some(detected.to_string_lossy().to_string());
+        }
+        result.push(item);
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn download_emulator(
+    id: String,
+    window: Window,
+    state: State<'_, AppState>,
+) -> Result<EmulatorCatalogItem, String> {
+    use tauri::Emitter;
+
+    let emit_progress = |percent: u32, status: &str, error: Option<String>| {
+        let _ = window.emit(
+            "kairo://emulator-download-progress",
+            EmulatorDownloadProgress {
+                id: id.clone(),
+                percent,
+                status: status.to_string(),
+                error,
+            },
+        );
+    };
+
+    let (url, folder_name, exe_subpath) = match id.as_str() {
+        "retroarch" => (
+            "https://buildbot.libretro.com/stable/1.19.1/windows/x86_64/RetroArch.7z",
+            "RetroArch",
+            "retroarch.exe",
+        ),
+        "pcsx2" => (
+            "https://github.com/PCSX2/pcsx2/releases/download/v2.2.0/pcsx2-v2.2.0-windows-x64-Qt.7z",
+            "PCSX2",
+            "pcsx2-qt.exe",
+        ),
+        "dolphin" => (
+            "https://dl.dolphin-emu.org/releases/2409/dolphin-2409-x64.7z",
+            "Dolphin",
+            "Dolphin.exe",
+        ),
+        _ => return Err(format!("Téléchargement automatique non disponible pour '{}'", id)),
+    };
+
+    // Déterminer le dossier cible
+    let emu_base_dir = if kairo_core::AppPaths::is_portable() {
+        kairo_core::AppPaths::get_exe_dir().join("emulators")
+    } else {
+        let dev_dir = kairo_core::AppPaths::get_dev_project_dir().join("emulators");
+        if dev_dir.exists() {
+            dev_dir
+        } else {
+            kairo_core::AppPaths::get_live_dir().join("emulators")
+        }
+    };
+    let _ = fs::create_dir_all(&emu_base_dir);
+    let target_emu_dir = emu_base_dir.join(folder_name);
+    let _ = fs::create_dir_all(&target_emu_dir);
+
+    emit_progress(5, "Initialisation...", None);
+
+    // Fichier temporaire pour l'archive
+    let temp_archive = std::env::temp_dir().join(format!("kairo_{}_{}.7z", id, uuid::Uuid::new_v4()));
+    let temp_extract = std::env::temp_dir().join(format!("kairo_ext_{}_{}", id, uuid::Uuid::new_v4()));
+    let _ = fs::create_dir_all(&temp_extract);
+
+    emit_progress(15, "Téléchargement depuis la source officielle...", None);
+
+    // Télécharger avec curl.exe
+    let dl_status = std::process::Command::new("curl.exe")
+        .args(["-s", "-L", "--fail", "-o", temp_archive.to_str().unwrap(), url])
+        .status()
+        .map_err(|e| format!("Impossible de lancer curl.exe : {}", e))?;
+
+    if !dl_status.success() || !temp_archive.exists() || fs::metadata(&temp_archive).map(|m| m.len()).unwrap_or(0) == 0 {
+        let _ = fs::remove_file(&temp_archive);
+        let _ = fs::remove_dir_all(&temp_extract);
+        let err = format!("Échec du téléchargement de l'émulateur {}", id);
+        emit_progress(0, "Échec du téléchargement", Some(err.clone()));
+        return Err(err);
+    }
+
+    emit_progress(60, "Extraction de l'archive...", None);
+
+    // Extraire avec tar.exe
+    let ext_status = std::process::Command::new("tar.exe")
+        .args(["-xf", temp_archive.to_str().unwrap(), "-C", temp_extract.to_str().unwrap()])
+        .status()
+        .map_err(|e| format!("Impossible de lancer tar.exe : {}", e))?;
+
+    if !ext_status.success() {
+        let _ = fs::remove_file(&temp_archive);
+        let _ = fs::remove_dir_all(&temp_extract);
+        let err = format!("Échec de l'extraction de l'archive pour {}", id);
+        emit_progress(0, "Échec de l'extraction", Some(err.clone()));
+        return Err(err);
+    }
+
+    // Copier les fichiers extraits vers target_emu_dir
+    let mut source_dir = temp_extract.clone();
+    if let Ok(entries) = fs::read_dir(&temp_extract) {
+        let entries_vec: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+        if entries_vec.len() == 1 && entries_vec[0].file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
+            source_dir = entries_vec[0].path();
+        }
+    }
+
+    let _ = kairo_core::AppPaths::copy_dir_recursive(&source_dir, &target_emu_dir);
+
+    // Nettoyage temporaire de l'archive
+    let _ = fs::remove_file(&temp_archive);
+    let _ = fs::remove_dir_all(&temp_extract);
+
+    // Cas spécifique RetroArch : télécharger les cœurs essentiels
+    if id == "retroarch" {
+        emit_progress(75, "Téléchargement des cœurs Libretro essentiels...", None);
+        let cores_dir = emu_base_dir.join("cores");
+        let retro_cores_dir = target_emu_dir.join("cores");
+        let _ = fs::create_dir_all(&cores_dir);
+        let _ = fs::create_dir_all(&retro_cores_dir);
+
+        let essential_cores = [
+            ("snes9x", "https://buildbot.libretro.com/nightly/windows/x86_64/latest/snes9x_libretro.dll.zip"),
+            ("mgba", "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mgba_libretro.dll.zip"),
+            ("genesis_plus_gx", "https://buildbot.libretro.com/nightly/windows/x86_64/latest/genesis_plus_gx_libretro.dll.zip"),
+            ("fceumm", "https://buildbot.libretro.com/nightly/windows/x86_64/latest/fceumm_libretro.dll.zip"),
+            ("mupen64plus_next", "https://buildbot.libretro.com/nightly/windows/x86_64/latest/mupen64plus_next_libretro.dll.zip"),
+            ("swanstation", "https://buildbot.libretro.com/nightly/windows/x86_64/latest/swanstation_libretro.dll.zip"),
+            ("fbneo", "https://buildbot.libretro.com/nightly/windows/x86_64/latest/fbneo_libretro.dll.zip"),
+        ];
+
+        for (core_name, core_url) in essential_cores {
+            let core_zip = std::env::temp_dir().join(format!("kairo_core_{}.zip", core_name));
+            if std::process::Command::new("curl.exe")
+                .args(["-s", "-L", "--fail", "-o", core_zip.to_str().unwrap(), core_url])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+            {
+                let _ = std::process::Command::new("tar.exe")
+                    .args(["-xf", core_zip.to_str().unwrap(), "-C", cores_dir.to_str().unwrap()])
+                    .status();
+                let _ = std::process::Command::new("tar.exe")
+                    .args(["-xf", core_zip.to_str().unwrap(), "-C", retro_cores_dir.to_str().unwrap()])
+                    .status();
+                let _ = fs::remove_file(&core_zip);
+            }
+        }
+    }
+
+    emit_progress(90, "Application de la configuration arcade...", None);
+
+    // Configurations arcade automatiques
+    if id == "dolphin" {
+        let _ = fs::write(target_emu_dir.join("portable.txt"), "");
+    } else if id == "pcsx2" {
+        let _ = fs::write(target_emu_dir.join("portable.ini"), "");
+    } else if id == "retroarch" {
+        let cfg_path = target_emu_dir.join("retroarch.cfg");
+        if !cfg_path.exists() {
+            let default_cfg = "video_fullscreen = \"true\"\nmenu_driver = \"ozone\"\npause_nonactive = \"false\"\nui_companion_start_on_boot = \"false\"\n";
+            let _ = fs::write(&cfg_path, default_cfg);
+        }
+    }
+
+    // Chemin final de l'exécutable
+    let final_exe = target_emu_dir.join(exe_subpath);
+    let final_exe_str = final_exe.to_string_lossy().to_string();
+
+    // Mettre à jour dans la base SQLite
+    let _ = state.db.update_emulator_path(&id, Some(&final_exe_str));
+
+    emit_progress(100, "Installation et configuration terminées !", None);
+
+    let catalog = get_emulator_catalog(state)?;
+    catalog
+        .into_iter()
+        .find(|item| item.id == id)
+        .ok_or_else(|| "Émulateur introuvable après installation".into())
+}
+
+#[tauri::command]
+pub fn scan_and_auto_detect_emulators(state: State<'_, AppState>) -> Result<Vec<EmulatorCatalogItem>, String> {
+    let supported = ["retroarch", "pcsx2", "dolphin", "ryujinx", "rpcs3"];
+    for id in supported {
+        if let Some(exe_path) = detect_installed_emulator(id) {
+            let path_str = exe_path.to_string_lossy().to_string();
+            let _ = state.db.update_emulator_path(id, Some(&path_str));
+        }
+    }
+    get_emulator_catalog(state)
+}
+
+#[tauri::command]
+pub fn open_emulators_folder() -> Result<(), String> {
+    let dir = kairo_core::AppPaths::get_emulators_dir();
+    let _ = fs::create_dir_all(&dir);
+    #[cfg(windows)]
+    {
+        std::process::Command::new("explorer")
+            .arg(&dir)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+

@@ -89,58 +89,39 @@ impl Launcher {
             }
         }
 
-        let emu_base = AppPaths::get_emulators_dir();
+        let emu_dirs = AppPaths::get_emulator_search_dirs();
 
-        // 2. Détection automatique selon le nom de l'émulateur
-        let candidates: Vec<PathBuf> = match emulator_id {
-            "retroarch" => {
-                vec![
-                    emu_base.join("RetroArch/retroarch.exe"),
-                    emu_base.join("retroarch/retroarch.exe"),
-                    exe_dir.join("emulators/RetroArch/retroarch.exe"),
-                    exe_dir.join("emulators/retroarch/retroarch.exe"),
-                    current_dir.join("emulators/RetroArch/retroarch.exe"),
-                    PathBuf::from("C:\\Emulators\\RetroArch\\retroarch.exe"),
-                ]
+        // 2. Détection automatique selon le nom de l'émulateur dans tous les dossiers de recherche
+        let mut candidates: Vec<PathBuf> = Vec::new();
+        for dir in &emu_dirs {
+            match emulator_id {
+                "retroarch" => {
+                    candidates.push(dir.join("RetroArch/retroarch.exe"));
+                    candidates.push(dir.join("retroarch/retroarch.exe"));
+                    candidates.push(dir.join("retroarch.exe"));
+                }
+                "pcsx2" => {
+                    candidates.push(dir.join("PCSX2/pcsx2-qt.exe"));
+                    candidates.push(dir.join("PCSX2/pcsx2.exe"));
+                    candidates.push(dir.join("pcsx2-qt.exe"));
+                }
+                "dolphin" => {
+                    candidates.push(dir.join("Dolphin/Dolphin.exe"));
+                    candidates.push(dir.join("dolphin/Dolphin.exe"));
+                    candidates.push(dir.join("Dolphin.exe"));
+                }
+                "ryujinx" => {
+                    candidates.push(dir.join("Ryujinx/Ryujinx.exe"));
+                    candidates.push(dir.join("Ryujinx/Ryubing.exe"));
+                    candidates.push(dir.join("Ryujinx.exe"));
+                }
+                "rpcs3" => {
+                    candidates.push(dir.join("RPCS3/rpcs3.exe"));
+                    candidates.push(dir.join("rpcs3.exe"));
+                }
+                _ => {}
             }
-            "pcsx2" => {
-                vec![
-                    emu_base.join("PCSX2/pcsx2-qt.exe"),
-                    emu_base.join("PCSX2/pcsx2.exe"),
-                    exe_dir.join("emulators/PCSX2/pcsx2-qt.exe"),
-                    exe_dir.join("emulators/PCSX2/pcsx2.exe"),
-                    current_dir.join("emulators/PCSX2/pcsx2-qt.exe"),
-                    PathBuf::from("C:\\Emulators\\PCSX2\\pcsx2-qt.exe"),
-                ]
-            }
-            "dolphin" => {
-                vec![
-                    emu_base.join("Dolphin/Dolphin.exe"),
-                    exe_dir.join("emulators/Dolphin/Dolphin.exe"),
-                    current_dir.join("emulators/Dolphin/Dolphin.exe"),
-                    PathBuf::from("C:\\Emulators\\Dolphin\\Dolphin.exe"),
-                ]
-            }
-            "ryujinx" => {
-                vec![
-                    emu_base.join("Ryujinx/Ryujinx.exe"),
-                    emu_base.join("Ryujinx/Ryubing.exe"),
-                    exe_dir.join("emulators/Ryujinx/Ryujinx.exe"),
-                    exe_dir.join("emulators/Ryujinx/Ryubing.exe"),
-                    current_dir.join("emulators/Ryujinx/Ryujinx.exe"),
-                    PathBuf::from("C:\\Emulators\\Ryujinx\\Ryujinx.exe"),
-                ]
-            }
-            "rpcs3" => {
-                vec![
-                    emu_base.join("RPCS3/rpcs3.exe"),
-                    exe_dir.join("emulators/RPCS3/rpcs3.exe"),
-                    current_dir.join("emulators/RPCS3/rpcs3.exe"),
-                    PathBuf::from("C:\\Emulators\\RPCS3\\rpcs3.exe"),
-                ]
-            }
-            _ => vec![],
-        };
+        }
 
         for candidate in candidates {
             if candidate.exists() {
@@ -234,18 +215,35 @@ impl Launcher {
             let mut resolved = core_name.clone();
             if let Some(emu_parent) = clean_exe_path.parent() {
                 let candidate1 = emu_parent.join("cores").join(&core_name);
+                let candidate2 = emu_parent.join(&core_name);
                 if candidate1.exists() {
                     let s = std::fs::canonicalize(&candidate1)
                         .map(|c| c.to_string_lossy().to_string())
                         .unwrap_or_else(|_| candidate1.to_string_lossy().to_string());
                     resolved = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
+                } else if candidate2.exists() {
+                    let s = std::fs::canonicalize(&candidate2)
+                        .map(|c| c.to_string_lossy().to_string())
+                        .unwrap_or_else(|_| candidate2.to_string_lossy().to_string());
+                    resolved = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
                 } else {
-                    let candidate2 = emu_parent.join(&core_name);
-                    if candidate2.exists() {
-                        let s = std::fs::canonicalize(&candidate2)
-                            .map(|c| c.to_string_lossy().to_string())
-                            .unwrap_or_else(|_| candidate2.to_string_lossy().to_string());
-                        resolved = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
+                    for search_dir in AppPaths::get_emulator_search_dirs() {
+                        let c3 = search_dir.join("cores").join(&core_name);
+                        if c3.exists() {
+                            let s = std::fs::canonicalize(&c3)
+                                .map(|c| c.to_string_lossy().to_string())
+                                .unwrap_or_else(|_| c3.to_string_lossy().to_string());
+                            resolved = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
+                            break;
+                        }
+                        let c4 = search_dir.join(&core_name);
+                        if c4.exists() {
+                            let s = std::fs::canonicalize(&c4)
+                                .map(|c| c.to_string_lossy().to_string())
+                                .unwrap_or_else(|_| c4.to_string_lossy().to_string());
+                            resolved = s.strip_prefix(r"\\?\").unwrap_or(&s).to_string();
+                            break;
+                        }
                     }
                 }
             }

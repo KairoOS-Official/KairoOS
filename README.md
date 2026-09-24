@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/logo.png?v=2" alt="KaïroOS Arcade Frontend Logo" width="180" />
+   <img src="src/assets/logo.png?v=2" alt="KaïroOS Arcade Frontend Logo" width="180" />
 </p>
 
 # 🕹️ KaïroOS

@@ -54,7 +54,7 @@ npm run build:portable
 node scripts/build-portable.mjs
 ```
 
-**Résultat produit dans `builds/portable/` :**
+**Résultat produit dans `.live/builds/portable/v<version>/` :**
 ```
 builds/portable/
 ├── KaïroOS.exe               # Binaire autonome complet
@@ -73,10 +73,10 @@ builds/portable/
 Pour créer un installeur Windows classique qui installera KaïroOS dans `Program Files` et stockera les profils joueurs dans `%APPDATA%` :
 
 ```powershell
-npm run tauri build
+npm run build:installer
 ```
 Les fichiers d'installation générés se trouveront dans :
-`src-tauri/target/release/bundle/nsis/` ou `builds/installer/`.
+`.live/builds/installer/v<version>/bundle/nsis/` ou `.live/builds/installer/v<version>/bundle/msi/`.
 
 ---
 

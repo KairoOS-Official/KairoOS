@@ -1,6 +1,7 @@
 import React from 'react';
 import { Gamepad2, Settings as SettingsIcon, Lock, PlusCircle } from 'lucide-react';
 import { AppMode } from '../../../types';
+import logoUrl from '../../../assets/logo.png';
 
 interface SidebarHeaderProps {
   gamepadConnected: boolean;
@@ -31,7 +32,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = ({
         {/* Logo KaïroOS */}
         <div className="relative w-11 h-11 rounded-2xl bg-gradient-to-tr from-purple-600 via-pink-600 to-rose-500 p-0.5 shadow-md shadow-pink-500/20 flex items-center justify-center shrink-0">
           <div className="w-full h-full bg-white/10 backdrop-blur-xs rounded-[14px] flex items-center justify-center p-1.5 text-white">
-            <img src="/logo.png" alt="KaïroOS" className="w-full h-full object-contain" />
+            <img src={logoUrl} alt="KaïroOS" className="w-full h-full object-contain" />
           </div>
           <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-rose-500 border-2 border-white shadow-xs" />
         </div>

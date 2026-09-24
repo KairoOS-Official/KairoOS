@@ -1,6 +1,6 @@
 [package]
 name = "kairo-app"
-version = "0.1.0"
+version = "26.1.0"
 description = "KaïroOS - Frontend d'arcade custom complet sous Windows"
 authors = ["Flow (Florian) — FlowCreativeStudio <https://github.com/NayrolfRdgs>"]
 edition = "2021"

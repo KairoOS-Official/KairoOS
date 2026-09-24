@@ -1,14 +1,19 @@
-import { existsSync, mkdirSync, writeFileSync, copyFileSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 console.log('====================================================');
 console.log('🚀 CRÉATION DU PACKAGE PORTABLE AUTONOME — KAÏROOS');
 console.log('====================================================\n');
 
-// Détection de la racine studio pour placer les builds dans .live/builds/portable
-const studioRoot = path.resolve('..');
-const portableDir = process.env.KAIROS_PORTABLE_DIR || path.join(studioRoot, '.live', 'builds', 'portable');
+const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const studioRoot = path.resolve(projectRoot, '..');
+const packageVersion = JSON.parse(readFileSync(path.join(projectRoot, 'package.json'), 'utf8')).version;
+const versionLabel = `v${packageVersion}`;
+const portableDir = process.env.KAIROS_PORTABLE_DIR || path.join(studioRoot, '.live', 'builds', 'portable', versionLabel);
+const targetDir = path.join(studioRoot, '.live', 'builds', 'target', versionLabel);
+const buildEnv = { ...process.env, CARGO_TARGET_DIR: targetDir };
 
 // 1. Création de l'arborescence complète des dossiers
 const dirsToCreate = [
@@ -42,7 +47,7 @@ for (const dir of dirsToCreate) {
 
 // 2. Build & Packaging Tauri Standalone (Frontend React intégré dans le binaire)
 console.log('🦀 Build du binaire autonome complet avec assets intégrés (Tauri)...');
-execSync('npx tauri build --no-bundle', { stdio: 'inherit' });
+execSync('npx tauri build --no-bundle', { stdio: 'inherit', cwd: projectRoot, env: buildEnv });
 
 // 3. Fermeture des processus résiduels et copie de l'exécutable autonome
 try {
@@ -50,9 +55,7 @@ try {
 } catch (_) {}
 
 const candidateExePaths = [
-  path.resolve(process.env.CARGO_TARGET_DIR || path.resolve('builds', 'target'), 'release', 'kairo-app.exe'),
-  path.resolve('builds', 'target', 'release', 'kairo-app.exe'),
-  path.resolve('target', 'release', 'kairo-app.exe'),
+  path.join(targetDir, 'release', 'kairo-app.exe'),
 ];
 const releaseExe = candidateExePaths.find((p) => existsSync(p)) || candidateExePaths[0];
 
@@ -66,30 +69,35 @@ if (existsSync(releaseExe)) {
 }
 
 // 4. Synchronisation automatique de tous les émulateurs pré-installés
-if (existsSync('emulators')) {
+const emulatorsSource = path.join(projectRoot, 'emulators');
+if (existsSync(emulatorsSource)) {
   console.log('🎮 Synchronisation des émulateurs dans builds/portable/emulators/ ...');
   try {
-    execSync('powershell -Command "Copy-Item -Path \'emulators/*\' -Destination \'builds/portable/emulators\' -Recurse -Force -ErrorAction SilentlyContinue"', { stdio: 'ignore' });
+    execSync(`powershell -Command "Copy-Item -Path '${emulatorsSource}/*' -Destination '${path.join(portableDir, 'emulators')}' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
   } catch (_) {}
 }
 
 // 5. Synchronisation automatique de tous les thèmes
-const themesSource = existsSync('../kairos-themes/official') ? '../kairos-themes/official' : 'themes';
+const themesSource = existsSync(path.join(studioRoot, 'kairos-themes', 'official'))
+  ? path.join(studioRoot, 'kairos-themes', 'official')
+  : path.join(projectRoot, 'themes');
 if (existsSync(themesSource)) {
   console.log(`🎨 Synchronisation des thèmes (${themesSource}) dans builds/portable/themes/ ...`);
   try {
-    execSync(`powershell -Command "Copy-Item -Path '${themesSource}/*' -Destination 'builds/portable/themes' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
+    execSync(`powershell -Command "Copy-Item -Path '${themesSource}/*' -Destination '${path.join(portableDir, 'themes')}' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
   } catch (_) {}
 }
 
 // 5bis. Synchronisation automatique des plugins
-const pluginsSource = existsSync('../kairos-plugins/official') ? '../kairos-plugins/official' : 'plugins';
+const pluginsSource = existsSync(path.join(studioRoot, 'kairos-plugins', 'official'))
+  ? path.join(studioRoot, 'kairos-plugins', 'official')
+  : path.join(projectRoot, 'plugins');
 if (existsSync(pluginsSource)) {
   console.log(`🔌 Synchronisation des plugins (${pluginsSource}) dans builds/portable/plugins/ ...`);
   try {
     const pluginsTarget = path.join(portableDir, 'plugins');
     if (!existsSync(pluginsTarget)) mkdirSync(pluginsTarget, { recursive: true });
-    execSync(`powershell -Command "Copy-Item -Path '${pluginsSource}/*' -Destination 'builds/portable/plugins' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
+    execSync(`powershell -Command "Copy-Item -Path '${pluginsSource}/*' -Destination '${pluginsTarget}' -Recurse -Force -ErrorAction SilentlyContinue"`, { stdio: 'ignore' });
   } catch (_) {}
 }
 

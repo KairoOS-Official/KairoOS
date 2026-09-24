@@ -1,6 +1,7 @@
 import React from 'react';
 import { Gamepad2, Settings as SettingsIcon, Lock, PlusCircle } from 'lucide-react';
 import { AppMode } from '../../../types';
+import logoUrl from '../../../assets/logo.png';
 
 interface SidebarFooterProps {
   gamepadConnected: boolean;
@@ -45,7 +46,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = ({
             style={{ backgroundColor: 'var(--accent-primary)' }}
             className="w-9 h-9 rounded-xl flex items-center justify-center p-1 text-white shadow-sm shadow-black/10 shrink-0"
           >
-            <img src="/logo.png" alt="KaïroOS" className="w-6 h-6 object-contain" />
+            <img src={logoUrl} alt="KaïroOS" className="w-6 h-6 object-contain" />
           </div>
 
           <div>

@@ -33,10 +33,6 @@ export async function openLogsFolder(): Promise<void> {
   return invokeCommand<void>('open_logs_folder');
 }
 
-export async function testEmulatorExe(path: string): Promise<boolean> {
-  return invokeCommand<boolean>('test_emulator_exe', { path });
-}
-
 export async function exportConfig(destZipPath: string): Promise<void> {
   return invokeCommand<void>('export_config', { destZipPath });
 }

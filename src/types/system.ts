@@ -21,6 +21,27 @@ export interface Emulator {
   website_url?: string;
 }
 
+export interface EmulatorCatalogItem {
+  id: string;
+  name: string;
+  systems: string[];
+  description: string;
+  default_exe: string;
+  default_args: string;
+  download_url?: string;
+  is_installed: boolean;
+  installed_path?: string;
+  website_url: string;
+  notes?: string;
+}
+
+export interface EmulatorDownloadProgress {
+  id: string;
+  percent: number;
+  status: string;
+  error?: string;
+}
+
 export interface FranchiseCollection {
   id: string;
   name: string;

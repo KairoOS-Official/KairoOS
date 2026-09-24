@@ -1,7 +1,7 @@
 {
   "name": "kairo-os",
   "private": true,
-  "version": "0.1.0",
+  "version": "26.1.0",
   "description": "Frontend d'arcade custom complet sous Windows 100% open source",
   "author": "Flow (Florian) — FlowCreativeStudio (https://github.com/NayrolfRdgs)",
   "type": "module",
@@ -13,7 +13,7 @@
     "build:spotify": "npm --prefix ../kairos-plugins/official/kairo-spotify-screensaver run build",
     "build:plugins": "npm run build:remote && npm run build:scraper && npm run build:spotify",
     "build:portable": "node scripts/build-portable.mjs",
-    "build:installer": "tauri build",
+    "build:installer": "node scripts/build-installer.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
